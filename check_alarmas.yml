@@ -1,4 +1,4 @@
-name: Chequeo de alarmas BYMA
+name: .github/workflows/check_alarmas.yml
 
 on:
   # Corre cada 30 minutos de lunes a viernes
