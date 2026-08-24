@@ -28,8 +28,7 @@ UMBRAL_VOLUMEN = 2.0         # veces el volumen promedio de 20 dias
 # ninguna accion cumpla la condicion), para confirmar que el envio
 # de mail funciona bien. Poner en False cuando ya lo confirmaste,
 # asi no te llega un mail cada 15 minutos sin necesidad.
-TEST_MODE = True
-
+TEST_MODE = False
 # ---------------------------------------------------------------
 # LISTA DE TICKERS - ~100 acciones importantes de EEUU con CEDEAR en BYMA
 # Agrega o saca tickers de esta lista cuando quieras.
