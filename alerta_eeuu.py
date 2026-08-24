@@ -24,6 +24,12 @@ import yfinance as yf
 UMBRAL_PORCENTAJE = 3.5      # % minimo de suba en el dia
 UMBRAL_VOLUMEN = 2.0         # veces el volumen promedio de 20 dias
 
+# MODO TEST: si esta en True, manda SIEMPRE un mail al final (aunque
+# ninguna accion cumpla la condicion), para confirmar que el envio
+# de mail funciona bien. Poner en False cuando ya lo confirmaste,
+# asi no te llega un mail cada 15 minutos sin necesidad.
+TEST_MODE = True
+
 # ---------------------------------------------------------------
 # LISTA DE TICKERS - ~100 acciones importantes de EEUU con CEDEAR en BYMA
 # Agrega o saca tickers de esta lista cuando quieras.
@@ -130,6 +136,18 @@ def main():
 
     if not encontrados:
         print("Ninguna accion cumplio la condicion en esta corrida.")
+        if TEST_MODE:
+            enviar_mail(
+                "🧪 Test - Alerta de precios EEUU (sin matches reales)",
+                "Este es un mail de prueba (TEST_MODE = True).\n\n"
+                "El script corrio bien y reviso {} tickers, pero ninguno cumplio "
+                "la condicion (suba {}% o mas + volumen {}x o mas).\n\n"
+                "Si este mail te llego, el envio de mail funciona correctamente. "
+                "Cuando quieras dejar de recibir este aviso de prueba, poné "
+                "TEST_MODE = False en el script.".format(
+                    len(TICKERS), UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
+                ),
+            )
         return
 
     # Ordenar de mayor a menor variacion
