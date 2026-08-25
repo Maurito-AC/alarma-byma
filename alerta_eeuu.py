@@ -21,7 +21,7 @@ import yfinance as yf
 # ---------------------------------------------------------------
 # CONFIGURACION DE LA ALERTA
 # ---------------------------------------------------------------
-UMBRAL_PORCENTAJE = 3.5      # % minimo de suba en el dia
+UMBRAL_PORCENTAJE = 3      # % minimo de suba en el dia
 UMBRAL_VOLUMEN = 2.0         # veces el volumen promedio de 20 dias
 
 # MODO TEST: si esta en True, manda SIEMPRE un mail al final (aunque
