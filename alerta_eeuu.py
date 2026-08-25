@@ -1,76 +1,71 @@
 """
-Alerta de Movidas con Volumen - Acciones de EEUU con CEDEAR en BYMA
+Alerta Pre-Mercado vs Post-Mercado del dia anterior
 --------------------------------------------------------------------
-Chequea el precio REAL en dolares (no el CEDEAR) de una lista amplia
-de acciones importantes de EEUU que tienen CEDEAR en BYMA.
+Corre UNA SOLA VEZ por dia, a las 10:00 hs Argentina (antes de que
+abra el mercado regular de EEUU a las 10:30 hs ART).
+
+Compara:
+  - El PRE-MERCADO de HOY (04:00 a 09:30 hs de Nueva York)
+  contra
+  - El POST-MERCADO (after-hours) del DIA ANTERIOR (16:00 a 20:00
+    hs de Nueva York)
 
 Condicion de alerta (las DOS deben cumplirse):
-  1) Suba un 5% o mas en el dia (SOLO ALCISTA, no baja)
-  2) El volumen de hoy sea 2x o mas el volumen promedio de los
-     ultimos 20 dias (volumen "inusual")
+  1) El precio sube 3.5% o mas entre esas dos sesiones
+  2) El volumen de pre-mercado de hoy es 3x o mas el volumen que
+     hubo en el post-mercado de ayer
 
-Manda UN SOLO mail por corrida con todos los tickers que cumplen
-la condicion (no un mail por ticker).
+Manda UN SOLO mail con todos los tickers que cumplen la condicion.
+
+NOTA: los datos intradia de yfinance (prepost=True) no siempre estan
+disponibles para todos los tickers, y para las acciones menos
+liquidas puede no haber operaciones registradas en esas franjas
+horarias. En esos casos el ticker se saltea (no es un error).
 """
 
 import os
 import smtplib
+import datetime
 from email.mime.text import MIMEText
 import yfinance as yf
 
 # ---------------------------------------------------------------
-# CONFIGURACION DE LA ALERTA
+# CONFIGURACION
 # ---------------------------------------------------------------
-UMBRAL_PORCENTAJE = 3      # % minimo de suba en el dia
-UMBRAL_VOLUMEN = 2.0         # veces el volumen promedio de 20 dias
+UMBRAL_PORCENTAJE = 3.5      # % minimo de suba entre postmarket ayer y premarket hoy
+UMBRAL_VOLUMEN = 3.0         # veces el volumen del postmarket de ayer
 
-# MODO TEST: si esta en True, manda SIEMPRE un mail al final (aunque
-# ninguna accion cumpla la condicion), para confirmar que el envio
-# de mail funciona bien. Poner en False cuando ya lo confirmaste,
-# asi no te llega un mail cada 15 minutos sin necesidad.
-TEST_MODE = False
-# ---------------------------------------------------------------
-# LISTA DE TICKERS - ~100 acciones importantes de EEUU con CEDEAR en BYMA
-# Agrega o saca tickers de esta lista cuando quieras.
-# ---------------------------------------------------------------
+TEST_MODE = False            # True = manda mail de prueba aunque no haya matches
+
+ZONA_NY = "America/New_York"
+
+# Misma lista de ~100 tickers importantes de EEUU con CEDEAR en BYMA
 TICKERS = [
-    # Tecnologia / Mega cap
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "NFLX",
     "ORCL", "ADBE", "CRM", "INTC", "AMD", "QCOM", "TXN", "AVGO",
     "CSCO", "IBM", "MU", "AMAT", "LRCX", "MRVL", "ON", "PANW",
     "PLTR", "SNOW", "CRWD", "ZM", "UBER", "ABNB", "SHOP", "SPOT",
     "SNAP", "PINS", "COIN", "RIOT", "MARA", "IONQ", "RGTI", "ASTS",
     "HIMS", "NBIS", "CRWV",
-    # Consumo / Retail
     "WMT", "COST", "TGT", "HD", "LOW", "MCD", "SBUX", "NKE", "DIS",
     "KO", "PEP", "PG", "KMB", "EL",
-    # Financieras
     "JPM", "BAC", "WFC", "C", "GS", "MS", "V", "MA", "PYPL", "AXP",
     "BLK", "SCHW",
-    # Salud
     "JNJ", "PFE", "MRK", "ABBV", "UNH", "LLY", "BMY", "GILD", "AMGN",
     "CVS", "MDT", "ABT",
-    # Industriales
     "BA", "CAT", "DE", "GE", "HON", "MMM", "UPS", "RTX", "LMT", "GD",
     "UNP",
-    # Energia
     "XOM", "CVX", "COP", "OXY", "SLB", "PSX",
-    # Telecom
     "T", "VZ", "TMUS",
-    # Autos
     "F", "GM",
-    # ADRs chinos
     "BABA", "JD", "PDD", "BIDU", "NTES", "XPEV", "LI",
-    # Semis / hardware extra
     "TSM", "ASML",
-    # Materiales / mineria
     "FCX", "NEM", "GOLD", "PAAS",
-    # Otros
     "MELI",
 ]
 
 # ---------------------------------------------------------------
-# CREDENCIALES (GitHub Secrets)
+# CREDENCIALES (GitHub Secrets - mismas que el otro script)
 # ---------------------------------------------------------------
 GMAIL_USER = os.environ["GMAIL_USER"]
 GMAIL_APP_PASSWORD = os.environ["GMAIL_APP_PASSWORD"]
@@ -90,32 +85,63 @@ def enviar_mail(asunto: str, cuerpo: str):
 
 
 def chequear_ticker(ticker: str):
-    """Devuelve un dict con los datos si cumple la condicion, o None."""
+    """Compara premarket de hoy vs postmarket de ayer. Devuelve dict o None."""
     try:
-        data = yf.Ticker(ticker).history(period="1mo", interval="1d")
-        if data.empty or len(data) < 21:
+        t = yf.Ticker(ticker)
+        # 5 dias de datos en velas de 5 minutos, incluyendo pre/post mercado
+        data = t.history(period="5d", interval="5m", prepost=True)
+        if data.empty:
+            print(f"{ticker}: sin datos intradia disponibles")
             return None
 
-        cierre_hoy = float(data["Close"].iloc[-1])
-        cierre_ayer = float(data["Close"].iloc[-2])
-        volumen_hoy = float(data["Volume"].iloc[-1])
-        volumen_promedio_20d = float(data["Volume"].iloc[-21:-1].mean())
+        data.index = data.index.tz_convert(ZONA_NY)
+        hoy = datetime.datetime.now(datetime.timezone.utc).astimezone(
+            __import__("zoneinfo").ZoneInfo(ZONA_NY)
+        ).date()
 
-        if volumen_promedio_20d == 0:
+        dias_disponibles = sorted(set(data.index.date))
+        dias_anteriores = [d for d in dias_disponibles if d < hoy]
+        if not dias_anteriores:
+            print(f"{ticker}: no hay dia anterior con datos")
+            return None
+        dia_anterior = dias_anteriores[-1]
+
+        # Postmarket de ayer: 16:00 a 20:00 hs NY
+        df_ayer = data[data.index.date == dia_anterior]
+        post_ayer = df_ayer.between_time("16:00", "20:00")
+        if post_ayer.empty:
+            print(f"{ticker}: sin operaciones en postmarket de ayer")
+            return None
+        precio_post_ayer = float(post_ayer["Close"].iloc[-1])
+        volumen_post_ayer = float(post_ayer["Volume"].sum())
+
+        # Premarket de hoy: 04:00 a 09:30 hs NY
+        df_hoy = data[data.index.date == hoy]
+        pre_hoy = df_hoy.between_time("04:00", "09:30")
+        if pre_hoy.empty:
+            print(f"{ticker}: sin operaciones en premarket de hoy (todavia)")
+            return None
+        precio_pre_hoy = float(pre_hoy["Close"].iloc[-1])
+        volumen_pre_hoy = float(pre_hoy["Volume"].sum())
+
+        if precio_post_ayer == 0 or volumen_post_ayer == 0:
             return None
 
-        variacion_pct = (cierre_hoy - cierre_ayer) / cierre_ayer * 100
-        ratio_volumen = volumen_hoy / volumen_promedio_20d
+        variacion_pct = (precio_pre_hoy - precio_post_ayer) / precio_post_ayer * 100
+        ratio_volumen = volumen_pre_hoy / volumen_post_ayer
 
         cumple = (variacion_pct >= UMBRAL_PORCENTAJE) and (ratio_volumen >= UMBRAL_VOLUMEN)
 
         if cumple:
             return {
                 "ticker": ticker,
-                "precio": cierre_hoy,
+                "precio_pre_hoy": precio_pre_hoy,
+                "precio_post_ayer": precio_post_ayer,
                 "variacion_pct": variacion_pct,
                 "ratio_volumen": ratio_volumen,
             }
+
+        print(f"{ticker}: sin match (+{variacion_pct:.1f}%, vol x{ratio_volumen:.1f})")
         return None
     except Exception as e:
         print(f"Error con {ticker}: {e}")
@@ -130,39 +156,36 @@ def main():
         if resultado:
             encontrados.append(resultado)
             print(f"MATCH: {ticker} +{resultado['variacion_pct']:.1f}% vol x{resultado['ratio_volumen']:.1f}")
-        else:
-            print(f"{ticker}: sin match")
 
     if not encontrados:
-        print("Ninguna accion cumplio la condicion en esta corrida.")
+        print("Ninguna accion cumplio la condicion hoy.")
         if TEST_MODE:
             enviar_mail(
-                "🧪 Test - Alerta de precios EEUU (sin matches reales)",
-                "Este es un mail de prueba (TEST_MODE = True).\n\n"
-                "El script corrio bien y reviso {} tickers, pero ninguno cumplio "
-                "la condicion (suba {}% o mas + volumen {}x o mas).\n\n"
-                "Si este mail te llego, el envio de mail funciona correctamente. "
-                "Cuando quieras dejar de recibir este aviso de prueba, poné "
-                "TEST_MODE = False en el script.".format(
-                    len(TICKERS), UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
-                ),
+                "🧪 Test - Alerta Pre-Mercado vs Post-Mercado (sin matches)",
+                "Mail de prueba (TEST_MODE = True). El script corrio bien pero "
+                "ninguna accion cumplio la condicion hoy."
             )
         return
 
-    # Ordenar de mayor a menor variacion
     encontrados.sort(key=lambda x: x["variacion_pct"], reverse=True)
 
     lineas = []
     for r in encontrados:
         lineas.append(
-            f"{r['ticker']}: USD {r['precio']:.2f}  |  +{r['variacion_pct']:.1f}%  |  Volumen x{r['ratio_volumen']:.1f} del promedio"
+            f"{r['ticker']}: post-mercado ayer USD {r['precio_post_ayer']:.2f} -> "
+            f"pre-mercado hoy USD {r['precio_pre_hoy']:.2f}  |  +{r['variacion_pct']:.1f}%  |  "
+            f"Volumen x{r['ratio_volumen']:.1f} del postmarket de ayer"
         )
 
-    cuerpo = "Acciones con suba de {}% o mas y volumen {}x o mas del promedio:\n\n".format(
-        UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
-    ) + "\n".join(lineas)
+    cuerpo = (
+        "Acciones que subieron {}% o mas del post-mercado de ayer al pre-mercado de hoy, "
+        "con volumen {}x o mas el del post-mercado de ayer:\n\n".format(
+            UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
+        )
+        + "\n".join(lineas)
+    )
 
-    asunto = f"📈 Movida con Volumen - {len(encontrados)} accion(es) detectada(s)"
+    asunto = f"🌅 Pre-Mercado vs Post-Mercado - {len(encontrados)} accion(es) detectada(s)"
     enviar_mail(asunto, cuerpo)
 
 
