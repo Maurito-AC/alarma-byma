@@ -1,5 +1,5 @@
 """
-Alerta Pre-Mercado vs Post-Mercado del dia anterior
+Alerta Pre-Mercado vs Cierre Regular del dia anterior
 --------------------------------------------------------------------
 Corre UNA SOLA VEZ por dia, a las 10:00 hs Argentina (antes de que
 abra el mercado regular de EEUU a las 10:30 hs ART).
@@ -7,13 +7,23 @@ abra el mercado regular de EEUU a las 10:30 hs ART).
 Compara:
   - El PRE-MERCADO de HOY (04:00 a 09:30 hs de Nueva York)
   contra
-  - El POST-MERCADO (after-hours) del DIA ANTERIOR (16:00 a 20:00
-    hs de Nueva York)
+  - El CIERRE DEL MERCADO REGULAR del DIA ANTERIOR (la ultima vela
+    de la rueda normal, ANTES de cualquier reaccion de postmarket
+    por balances u otras noticias)
+
+Se compara contra el cierre REGULAR (no el postmarket) para
+capturar el movimiento COMPLETO desde antes de una noticia/balance,
+incluyendo todo lo que se movio en el afterhours de ayer. Si se
+comparara contra el postmarket de ayer, una suba fuerte por balance
+publicado ayer despues del cierre ya estaria "absorbida" en la base
+de comparacion y el % mostraria un numero mucho mas chico del real.
 
 Condicion de alerta (las DOS deben cumplirse):
-  1) El precio sube 3.5% o mas entre esas dos sesiones
-  2) El volumen de pre-mercado de hoy es 3x o mas el volumen que
-     hubo en el post-mercado de ayer
+  1) El precio de pre-mercado de hoy sube 3.5% o mas vs. el cierre
+     regular de ayer
+  2) El volumen de pre-mercado de hoy es 3x o mas el volumen del
+     postmarket de ayer (se mantiene esta base de volumen porque
+     son sesiones de tipo similar - ambas fuera de horario regular)
 
 Manda UN SOLO mail con todos los tickers que cumplen la condicion.
 
@@ -32,7 +42,7 @@ import yfinance as yf
 # ---------------------------------------------------------------
 # CONFIGURACION
 # ---------------------------------------------------------------
-UMBRAL_PORCENTAJE = 3.5      # % minimo de suba entre postmarket ayer y premarket hoy
+UMBRAL_PORCENTAJE = 3.5      # % minimo de suba: premarket hoy vs cierre regular ayer
 UMBRAL_VOLUMEN = 3.0         # veces el volumen del postmarket de ayer
 
 TEST_MODE = False            # True = manda mail de prueba aunque no haya matches
@@ -85,7 +95,7 @@ def enviar_mail(asunto: str, cuerpo: str):
 
 
 def chequear_ticker(ticker: str):
-    """Compara premarket de hoy vs postmarket de ayer. Devuelve dict o None."""
+    """Compara premarket de hoy vs cierre REGULAR de ayer. Devuelve dict o None."""
     try:
         t = yf.Ticker(ticker)
         # 5 dias de datos en velas de 5 minutos, incluyendo pre/post mercado
@@ -106,13 +116,20 @@ def chequear_ticker(ticker: str):
             return None
         dia_anterior = dias_anteriores[-1]
 
-        # Postmarket de ayer: 16:00 a 20:00 hs NY
         df_ayer = data[data.index.date == dia_anterior]
+
+        # Cierre REGULAR de ayer: ultima vela de la rueda normal (antes de las 16:00 NY)
+        regular_ayer = df_ayer.between_time("09:30", "16:00")
+        if regular_ayer.empty:
+            print(f"{ticker}: sin datos de rueda regular de ayer")
+            return None
+        cierre_regular_ayer = float(regular_ayer["Close"].iloc[-1])
+
+        # Postmarket de ayer: 16:00 a 20:00 hs NY (se usa solo para el volumen base)
         post_ayer = df_ayer.between_time("16:00", "20:00")
         if post_ayer.empty:
             print(f"{ticker}: sin operaciones en postmarket de ayer")
             return None
-        precio_post_ayer = float(post_ayer["Close"].iloc[-1])
         volumen_post_ayer = float(post_ayer["Volume"].sum())
 
         # Premarket de hoy: 04:00 a 09:30 hs NY
@@ -124,10 +141,10 @@ def chequear_ticker(ticker: str):
         precio_pre_hoy = float(pre_hoy["Close"].iloc[-1])
         volumen_pre_hoy = float(pre_hoy["Volume"].sum())
 
-        if precio_post_ayer == 0 or volumen_post_ayer == 0:
+        if cierre_regular_ayer == 0 or volumen_post_ayer == 0:
             return None
 
-        variacion_pct = (precio_pre_hoy - precio_post_ayer) / precio_post_ayer * 100
+        variacion_pct = (precio_pre_hoy - cierre_regular_ayer) / cierre_regular_ayer * 100
         ratio_volumen = volumen_pre_hoy / volumen_post_ayer
 
         cumple = (variacion_pct >= UMBRAL_PORCENTAJE) and (ratio_volumen >= UMBRAL_VOLUMEN)
@@ -136,7 +153,7 @@ def chequear_ticker(ticker: str):
             return {
                 "ticker": ticker,
                 "precio_pre_hoy": precio_pre_hoy,
-                "precio_post_ayer": precio_post_ayer,
+                "cierre_regular_ayer": cierre_regular_ayer,
                 "variacion_pct": variacion_pct,
                 "ratio_volumen": ratio_volumen,
             }
@@ -161,7 +178,7 @@ def main():
         print("Ninguna accion cumplio la condicion hoy.")
         if TEST_MODE:
             enviar_mail(
-                "🧪 Test - Alerta Pre-Mercado vs Post-Mercado (sin matches)",
+                "🧪 Test - Alerta Pre-Mercado (sin matches)",
                 "Mail de prueba (TEST_MODE = True). El script corrio bien pero "
                 "ninguna accion cumplio la condicion hoy."
             )
@@ -172,20 +189,20 @@ def main():
     lineas = []
     for r in encontrados:
         lineas.append(
-            f"{r['ticker']}: post-mercado ayer USD {r['precio_post_ayer']:.2f} -> "
+            f"{r['ticker']}: cierre regular ayer USD {r['cierre_regular_ayer']:.2f} -> "
             f"pre-mercado hoy USD {r['precio_pre_hoy']:.2f}  |  +{r['variacion_pct']:.1f}%  |  "
             f"Volumen x{r['ratio_volumen']:.1f} del postmarket de ayer"
         )
 
     cuerpo = (
-        "Acciones que subieron {}% o mas del post-mercado de ayer al pre-mercado de hoy, "
+        "Acciones que subieron {}% o mas del cierre regular de ayer al pre-mercado de hoy, "
         "con volumen {}x o mas el del post-mercado de ayer:\n\n".format(
             UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
         )
         + "\n".join(lineas)
     )
 
-    asunto = f"🌅 Pre-Mercado vs Post-Mercado - {len(encontrados)} accion(es) detectada(s)"
+    asunto = f"🌅 Pre-Mercado - {len(encontrados)} accion(es) detectada(s)"
     enviar_mail(asunto, cuerpo)
 
 
