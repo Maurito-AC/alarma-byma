@@ -34,10 +34,16 @@ horarias. En esos casos el ticker se saltea (no es un error).
 """
 
 import os
+import sys
 import smtplib
 import datetime
 from email.mime.text import MIMEText
 import yfinance as yf
+
+# Forzar que cada print() se escriba al instante (sin buffer), para que
+# el log de GitHub Actions muestre TODAS las lineas y no se pierdan
+# por el buffering normal de Python cuando no corre en una terminal.
+sys.stdout.reconfigure(line_buffering=True)
 
 # ---------------------------------------------------------------
 # CONFIGURACION
@@ -168,7 +174,10 @@ def chequear_ticker(ticker: str):
 def main():
     encontrados = []
 
-    for ticker in TICKERS:
+    print(f"Empezando a chequear {len(TICKERS)} tickers...")
+
+    for i, ticker in enumerate(TICKERS, start=1):
+        print(f"[{i}/{len(TICKERS)}] Chequeando {ticker}...")
         resultado = chequear_ticker(ticker)
         if resultado:
             encontrados.append(resultado)
