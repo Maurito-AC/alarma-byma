@@ -30,7 +30,7 @@ sys.stdout.reconfigure(line_buffering=True)
 # CONFIGURACION DE LA ALERTA
 # ---------------------------------------------------------------
 UMBRAL_PORCENTAJE = 3.0      # % minimo de suba en el dia (vela vs vela anterior)
-UMBRAL_VOLUMEN = 2.0         # veces el volumen PROMEDIO de los ultimos 2 dias habiles
+UMBRAL_VOLUMEN = 1.3         # veces el volumen PROMEDIO de los ultimos 2 dias habiles
 
 # MODO TEST: si esta en True, manda SIEMPRE un mail al final (aunque
 # ninguna accion cumpla la condicion), para confirmar que el envio
