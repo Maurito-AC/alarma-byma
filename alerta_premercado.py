@@ -5,17 +5,19 @@ Corre UNA SOLA VEZ por dia, a las 10:00 hs Argentina (antes de que
 abra el mercado regular de EEUU a las 10:30 hs ART).
 
 Compara:
-  - El PRE-MERCADO de HOY (04:00 a 09:30 hs de Nueva York)
-  contra
-  - El CIERRE DEL MERCADO REGULAR del DIA ANTERIOR (la ultima vela
-    de la rueda normal, ANTES de cualquier reaccion de postmarket
-    por balances u otras noticias)
+  - PRECIO: el PRE-MERCADO de HOY (04:00 a 09:30 hs de Nueva York)
+    contra el CIERRE DEL MERCADO REGULAR del DIA ANTERIOR (para
+    capturar el movimiento completo desde antes de un balance u
+    otra noticia, incluyendo lo que ya se movio en el afterhours).
+  - VOLUMEN: el volumen de PRE-MERCADO de HOY contra el PROMEDIO
+    del volumen de PRE-MERCADO de los ULTIMOS 2 DIAS HABILES (misma
+    franja horaria, mismo tipo de sesion - comparacion pareja).
 
 Condicion de alerta (las DOS deben cumplirse):
   1) El precio de pre-mercado de hoy sube 3.5% o mas vs. el cierre
      regular de ayer
-  2) El volumen de pre-mercado de hoy es 3x o mas el volumen del
-     postmarket de ayer
+  2) El volumen de pre-mercado de hoy es 3x o mas el promedio del
+     volumen de pre-mercado de los ultimos 2 dias habiles
 
 Manda UN SOLO mail con todos los tickers que cumplen la condicion.
 
@@ -88,7 +90,7 @@ def chequear_ticker(ticker: str):
     """
     try:
         t = yf.Ticker(ticker)
-        data = t.history(period="5d", interval="5m", prepost=True)
+        data = t.history(period="10d", interval="5m", prepost=True)
         if data.empty:
             return None, "sin datos intradia disponibles"
 
@@ -113,10 +115,20 @@ def chequear_ticker(ticker: str):
             return None, f"sin datos de rueda regular de {dia_anterior}"
         cierre_regular_ayer = float(regular_ayer["Close"].iloc[-1])
 
-        post_ayer = df_ayer.between_time("16:00", "20:00")
-        if post_ayer.empty:
-            return None, f"sin operaciones en postmarket de {dia_anterior}"
-        volumen_post_ayer = float(post_ayer["Volume"].sum())
+        # Volumen base: PROMEDIO del volumen de PRE-MERCADO de los ultimos
+        # 2 dias habiles (misma franja horaria, mismo tipo de sesion -
+        # comparacion "manzanas con manzanas", no contra la rueda regular).
+        ultimos_2_dias = dias_anteriores[-2:]
+        volumenes_premarket_previos = []
+        for dia in ultimos_2_dias:
+            df_dia = data[data.index.date == dia]
+            pre_dia = df_dia.between_time("04:00", "09:30")
+            if not pre_dia.empty:
+                volumenes_premarket_previos.append(float(pre_dia["Volume"].sum()))
+
+        if not volumenes_premarket_previos:
+            return None, "sin premarket en los ultimos dias para calcular el promedio base"
+        volumen_premarket_promedio = sum(volumenes_premarket_previos) / len(volumenes_premarket_previos)
 
         df_hoy = data[data.index.date == hoy]
         pre_hoy = df_hoy.between_time("04:00", "09:30")
@@ -125,11 +137,11 @@ def chequear_ticker(ticker: str):
         precio_pre_hoy = float(pre_hoy["Close"].iloc[-1])
         volumen_pre_hoy = float(pre_hoy["Volume"].sum())
 
-        if cierre_regular_ayer == 0 or volumen_post_ayer == 0:
+        if cierre_regular_ayer == 0 or volumen_premarket_promedio == 0:
             return None, "cierre o volumen base en cero, no se puede calcular"
 
         variacion_pct = (precio_pre_hoy - cierre_regular_ayer) / cierre_regular_ayer * 100
-        ratio_volumen = volumen_pre_hoy / volumen_post_ayer
+        ratio_volumen = volumen_pre_hoy / volumen_premarket_promedio
         cumple = (variacion_pct >= UMBRAL_PORCENTAJE) and (ratio_volumen >= UMBRAL_VOLUMEN)
 
         if cumple:
@@ -170,12 +182,12 @@ def main():
     lineas = [
         f"{r['ticker']}: cierre regular ayer USD {r['cierre_regular_ayer']:.2f} -> "
         f"pre-mercado hoy USD {r['precio_pre_hoy']:.2f}  |  +{r['variacion_pct']:.1f}%  |  "
-        f"Volumen x{r['ratio_volumen']:.1f} del postmarket de ayer"
+        f"Volumen x{r['ratio_volumen']:.1f} del promedio de pre-mercado de los ultimos 2 dias"
         for r in encontrados
     ]
     cuerpo = (
         "Acciones que subieron {}% o mas del cierre regular de ayer al pre-mercado de hoy, "
-        "con volumen {}x o mas el del post-mercado de ayer:\n\n".format(UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN)
+        "con volumen {}x o mas el promedio de pre-mercado de los ultimos 2 dias habiles:\n\n".format(UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN)
         + "\n".join(lineas)
     )
     asunto = f"🌅 Pre-Mercado - {len(encontrados)} accion(es) detectada(s)"
