@@ -37,8 +37,8 @@ sys.stdout.reconfigure(line_buffering=True)
 # ---------------------------------------------------------------
 # CONFIGURACION
 # ---------------------------------------------------------------
-UMBRAL_PORCENTAJE = 3.5
-UMBRAL_VOLUMEN = 3.0
+UMBRAL_PORCENTAJE = 3.0
+UMBRAL_VOLUMEN = 1.5
 TEST_MODE = False
 ZONA_NY = "America/New_York"
 
