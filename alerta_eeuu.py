@@ -8,7 +8,7 @@ Condicion de alerta (las DOS deben cumplirse):
   1) Suba un 3% o mas en el dia (SOLO ALCISTA, no baja) - vela de
      hoy vs. vela de ayer.
   2) El volumen de hoy sea 2x o mas el volumen PROMEDIO de los
-     ultimos 10 dias (no la vela inmediata anterior).
+     ultimos 2 dias habiles (no la vela inmediata anterior).
 
 Manda UN SOLO mail por corrida con todos los tickers que cumplen
 la condicion (no un mail por ticker).
@@ -23,7 +23,7 @@ import yfinance as yf
 # CONFIGURACION DE LA ALERTA
 # ---------------------------------------------------------------
 UMBRAL_PORCENTAJE = 3.0      # % minimo de suba en el dia (vela vs vela anterior)
-UMBRAL_VOLUMEN = 2.0         # veces el volumen PROMEDIO de los ultimos 10 dias
+UMBRAL_VOLUMEN = 2.0         # veces el volumen PROMEDIO de los ultimos 2 dias habiles
 
 # MODO TEST: si esta en True, manda SIEMPRE un mail al final (aunque
 # ninguna accion cumpla la condicion), para confirmar que el envio
@@ -93,20 +93,20 @@ def chequear_ticker(ticker: str):
     """Devuelve un dict con los datos si cumple la condicion, o None."""
     try:
         data = yf.Ticker(ticker).history(period="1mo", interval="1d")
-        if data.empty or len(data) < 11:
+        if data.empty or len(data) < 3:
             return None
 
         cierre_hoy = float(data["Close"].iloc[-1])
         cierre_ayer = float(data["Close"].iloc[-2])
         volumen_hoy = float(data["Volume"].iloc[-1])
-        # Promedio de volumen de los ultimos 10 dias (sin contar hoy)
-        volumen_promedio_10d = float(data["Volume"].iloc[-11:-1].mean())
+        # Promedio de volumen de los ultimos 2 dias habiles (sin contar hoy)
+        volumen_promedio_2d = float(data["Volume"].iloc[-3:-1].mean())
 
-        if volumen_promedio_10d == 0:
+        if volumen_promedio_2d == 0:
             return None
 
         variacion_pct = (cierre_hoy - cierre_ayer) / cierre_ayer * 100
-        ratio_volumen = volumen_hoy / volumen_promedio_10d
+        ratio_volumen = volumen_hoy / volumen_promedio_2d
 
         cumple = (variacion_pct >= UMBRAL_PORCENTAJE) and (ratio_volumen >= UMBRAL_VOLUMEN)
 
@@ -141,7 +141,7 @@ def main():
                 "🧪 Test - Alerta de precios EEUU (sin matches reales)",
                 "Este es un mail de prueba (TEST_MODE = True).\n\n"
                 "El script corrio bien y reviso {} tickers, pero ninguno cumplio "
-                "la condicion (suba {}% o mas + volumen {}x o mas del promedio de 10 dias).\n\n"
+                "la condicion (suba {}% o mas + volumen {}x o mas del promedio de 2 dias habiles).\n\n"
                 "Si este mail te llego, el envio de mail funciona correctamente. "
                 "Cuando quieras dejar de recibir este aviso de prueba, poné "
                 "TEST_MODE = False en el script.".format(
@@ -156,10 +156,10 @@ def main():
     lineas = []
     for r in encontrados:
         lineas.append(
-            f"{r['ticker']}: USD {r['precio']:.2f}  |  +{r['variacion_pct']:.1f}%  |  Volumen x{r['ratio_volumen']:.1f} del promedio de 10 dias"
+            f"{r['ticker']}: USD {r['precio']:.2f}  |  +{r['variacion_pct']:.1f}%  |  Volumen x{r['ratio_volumen']:.1f} del promedio de 2 dias habiles"
         )
 
-    cuerpo = "Acciones con suba de {}% o mas y volumen {}x o mas del promedio de 10 dias:\n\n".format(
+    cuerpo = "Acciones con suba de {}% o mas y volumen {}x o mas del promedio de 2 dias habiles:\n\n".format(
         UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
     ) + "\n".join(lineas)
 
