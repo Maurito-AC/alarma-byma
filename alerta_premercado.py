@@ -19,8 +19,7 @@ Condicion de alerta (las DOS deben cumplirse):
   2) El volumen de pre-mercado de hoy es 3x o mas el promedio del
      volumen de pre-mercado de los ultimos 2 dias habiles
 
-Manda UN SOLO mail (HTML, con fecha y tamaño legible en celular) con
-todos los tickers que cumplen la condicion.
+Manda UN SOLO mail con todos los tickers que cumplen la condicion.
 
 Esta version SIEMPRE imprime un resultado por cada ticker (motivo
 del descarte incluido), para poder diagnosticar bien cualquier caso.
@@ -42,7 +41,6 @@ UMBRAL_PORCENTAJE = 3.0
 UMBRAL_VOLUMEN = 1.5
 TEST_MODE = False
 ZONA_NY = "America/New_York"
-ZONA_ART = "America/Argentina/Buenos_Aires"
 
 TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "NFLX",
@@ -66,34 +64,17 @@ TICKERS = [
     "TSM", "ASML",
     "FCX", "NEM", "GOLD", "PAAS",
     "MELI",
+    # Nuevos CEDEARs incorporados por Banco Comafi (agosto 2026)
+    "GEV", "TLN", "KLAC", "DELL", "WDC", "IBKR", "WELL", "PLD", "LIN", "SHW", "NTRA",
 ]
 
 GMAIL_USER = os.environ["GMAIL_USER"]
 GMAIL_APP_PASSWORD = os.environ["GMAIL_APP_PASSWORD"]
 TO_EMAIL = os.environ.get("TO_EMAIL", GMAIL_USER)
 
-DIAS_ES = {
-    0: "Lunes", 1: "Martes", 2: "Miercoles", 3: "Jueves",
-    4: "Viernes", 5: "Sabado", 6: "Domingo",
-}
-MESES_ES = {
-    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
-    7: "Julio", 8: "Agosto", 9: "Septiembre", 10: "Octubre", 11: "Noviembre",
-    12: "Diciembre",
-}
 
-
-def fecha_hoy_ar_texto() -> str:
-    ahora = datetime.datetime.now(datetime.timezone.utc).astimezone(
-        __import__("zoneinfo").ZoneInfo(ZONA_ART)
-    )
-    dia_semana = DIAS_ES[ahora.weekday()]
-    mes = MESES_ES[ahora.month]
-    return f"{dia_semana} {ahora.day} de {mes} de {ahora.year}"
-
-
-def enviar_mail(asunto: str, cuerpo_html: str):
-    msg = MIMEText(cuerpo_html, "html")
+def enviar_mail(asunto: str, cuerpo: str):
+    msg = MIMEText(cuerpo)
     msg["Subject"] = asunto
     msg["From"] = GMAIL_USER
     msg["To"] = TO_EMAIL
@@ -180,48 +161,9 @@ def chequear_ticker(ticker: str):
         return None, f"ERROR: {type(e).__name__}: {e}"
 
 
-def armar_html(encontrados, fecha_texto: str) -> str:
-    """Arma el cuerpo del mail en HTML, con tamaño de letra mediano
-    pensado para que se lea comodo desde el celular."""
-    estilo_base = (
-        "font-family:Arial,Helvetica,sans-serif;font-size:16px;"
-        "line-height:1.5;color:#111;"
-    )
-    filas = ""
-    for r in encontrados:
-        filas += f"""
-        <tr>
-          <td style="padding:8px 6px;border-bottom:1px solid #ddd;font-weight:bold;font-size:17px;">{r['ticker']}</td>
-          <td style="padding:8px 6px;border-bottom:1px solid #ddd;color:#0a7a2f;font-weight:bold;font-size:16px;">+{r['variacion_pct']:.1f}%</td>
-          <td style="padding:8px 6px;border-bottom:1px solid #ddd;font-size:16px;">Vol x{r['ratio_volumen']:.1f}</td>
-        </tr>"""
-
-    html = f"""\
-<html>
-  <body style="{estilo_base}margin:0;padding:16px;">
-    <p style="font-size:18px;font-weight:bold;margin:0 0 4px 0;">🌅 Alerta Pre-Mercado</p>
-    <p style="font-size:15px;color:#555;margin:0 0 16px 0;">{fecha_texto}</p>
-    <p style="font-size:17px;font-weight:bold;margin:0 0 10px 0;">
-      {len(encontrados)} accion(es) detectada(s)
-    </p>
-    <table style="border-collapse:collapse;width:100%;{estilo_base}">
-      <tr>
-        <th style="text-align:left;padding:6px;border-bottom:2px solid #333;font-size:15px;">Ticker</th>
-        <th style="text-align:left;padding:6px;border-bottom:2px solid #333;font-size:15px;">%</th>
-        <th style="text-align:left;padding:6px;border-bottom:2px solid #333;font-size:15px;">Volumen</th>
-      </tr>
-      {filas}
-    </table>
-  </body>
-</html>
-"""
-    return html
-
-
 def main():
     encontrados = []
-    fecha_texto = fecha_hoy_ar_texto()
-    print(f"Empezando a chequear {len(TICKERS)} tickers... ({fecha_texto})")
+    print(f"Empezando a chequear {len(TICKERS)} tickers...")
 
     for i, ticker in enumerate(TICKERS, start=1):
         resultado, motivo = chequear_ticker(ticker)
@@ -234,14 +176,24 @@ def main():
         if TEST_MODE:
             enviar_mail(
                 "🧪 Test - Alerta Pre-Mercado (sin matches)",
-                armar_html([], fecha_texto),
+                "Mail de prueba. El script corrio bien pero ninguna accion cumplio la condicion hoy."
             )
         return
 
     encontrados.sort(key=lambda x: x["variacion_pct"], reverse=True)
+    lineas = [
+        f"{r['ticker']}: cierre regular ayer USD {r['cierre_regular_ayer']:.2f} -> "
+        f"pre-mercado hoy USD {r['precio_pre_hoy']:.2f}  |  +{r['variacion_pct']:.1f}%  |  "
+        f"Volumen x{r['ratio_volumen']:.1f} del promedio de pre-mercado de los ultimos 2 dias"
+        for r in encontrados
+    ]
+    cuerpo = (
+        "Acciones que subieron {}% o mas del cierre regular de ayer al pre-mercado de hoy, "
+        "con volumen {}x o mas el promedio de pre-mercado de los ultimos 2 dias habiles:\n\n".format(UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN)
+        + "\n".join(lineas)
+    )
     asunto = f"🌅 Pre-Mercado - {len(encontrados)} accion(es) detectada(s)"
-    cuerpo_html = armar_html(encontrados, fecha_texto)
-    enviar_mail(asunto, cuerpo_html)
+    enviar_mail(asunto, cuerpo)
 
 
 if __name__ == "__main__":
