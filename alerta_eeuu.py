@@ -62,6 +62,8 @@ TICKERS = [
     "TSM", "ASML",
     "FCX", "NEM", "GOLD", "PAAS",
     "MELI",
+    # Nuevos CEDEARs incorporados por Banco Comafi (agosto 2026)
+    "GEV", "TLN", "KLAC", "DELL", "WDC", "IBKR", "WELL", "PLD", "LIN", "SHW", "NTRA",
 ]
 
 # ---------------------------------------------------------------
