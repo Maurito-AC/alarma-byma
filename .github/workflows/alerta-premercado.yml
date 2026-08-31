@@ -5,7 +5,7 @@ on:
   schedule:
     # Corre UNA VEZ por dia, de lunes a viernes, a las 13:00 UTC
     # (10:00 hs Argentina - antes de que abra el mercado a las 10:30 ART)
-    - cron: "0 13 * * 1-5"
+       - cron: "7 13 * * 1-5"
   workflow_dispatch: {}   # permite ejecutarlo a mano tambien
 
 jobs:
