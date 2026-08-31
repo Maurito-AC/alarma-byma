@@ -3,27 +3,59 @@ name: Alerta Pre-Mercado
 
 on:
   schedule:
-    # Corre UNA VEZ por dia, de lunes a viernes, a las 13:00 UTC
-    # (10:00 hs Argentina - antes de que abra el mercado a las 10:30 ART)
-       - cron: "7 13 * * 1-5"
+    # Horario principal: 13:07 UTC = 10:07 hs Argentina
+    - cron: "7 13 * * 1-5"
+    # Horario de respaldo: 13:20 UTC = 10:20 hs Argentina.
+    # Solo se ejecuta de verdad si el horario principal no corrio
+    # (o fallo) hoy - ver el paso "Verificar si ya corrio hoy".
+    - cron: "20 13 * * 1-5"
   workflow_dispatch: {}   # permite ejecutarlo a mano tambien
+
+permissions:
+  actions: read
+  contents: read
 
 jobs:
   chequear-premercado:
     runs-on: ubuntu-latest
     steps:
+      - name: Verificar si ya corrio hoy con exito
+        id: chequeo
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          HOY=$(date -u +%Y-%m-%d)
+          EXITOSAS=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow "alerta-premercado.yml" \
+            --event schedule \
+            --status success \
+            --json createdAt \
+            --jq "[.[] | select(.createdAt | startswith(\"$HOY\"))] | length")
+          echo "Corridas 'schedule' exitosas hoy ($HOY): $EXITOSAS"
+          if [ "$EXITOSAS" -gt "0" ]; then
+            echo "El horario principal ya corrio bien hoy, se salta el respaldo."
+            echo "saltar=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "saltar=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Clonar repo
+        if: steps.chequeo.outputs.saltar != 'true'
         uses: actions/checkout@v4
 
       - name: Configurar Python
+        if: steps.chequeo.outputs.saltar != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
       - name: Instalar dependencias
+        if: steps.chequeo.outputs.saltar != 'true'
         run: pip install -r requirements.txt
 
       - name: Ejecutar alerta de pre-mercado
+        if: steps.chequeo.outputs.saltar != 'true'
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
