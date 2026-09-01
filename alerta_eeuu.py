@@ -11,7 +11,9 @@ Condicion de alerta (las DOS deben cumplirse):
      ultimos 2 dias habiles (no la vela inmediata anterior).
 
 Manda UN SOLO mail por corrida con todos los tickers que cumplen
-la condicion (no un mail por ticker).
+la condicion (no un mail por ticker). Si ninguno cumple, manda
+igual un mail avisando "NO HAY MATCH CON LAS ACCIONES", para
+confirmar que la corrida se ejecuto bien.
 
 Esta version SIEMPRE imprime un resultado por cada ticker (motivo
 exacto incluido: match, sin match con los numeros, sin datos, o
@@ -32,13 +34,8 @@ sys.stdout.reconfigure(line_buffering=True)
 UMBRAL_PORCENTAJE = 3.0      # % minimo de suba en el dia (vela vs vela anterior)
 UMBRAL_VOLUMEN = 1.3         # veces el volumen PROMEDIO de los ultimos 2 dias habiles
 
-# MODO TEST: si esta en True, manda SIEMPRE un mail al final (aunque
-# ninguna accion cumpla la condicion), para confirmar que el envio
-# de mail funciona bien. Poner en False cuando ya lo confirmaste.
-TEST_MODE = False
-
 # ---------------------------------------------------------------
-# LISTA DE TICKERS - ~100 acciones importantes de EEUU con CEDEAR en BYMA
+# LISTA DE TICKERS - acciones importantes de EEUU con CEDEAR en BYMA
 # ---------------------------------------------------------------
 TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "NFLX",
@@ -64,6 +61,10 @@ TICKERS = [
     "MELI",
     # Nuevos CEDEARs incorporados por Banco Comafi (agosto 2026)
     "GEV", "TLN", "KLAC", "DELL", "WDC", "IBKR", "WELL", "PLD", "LIN", "SHW", "NTRA",
+    # Nuevos tickers agregados (septiembre 2026)
+    "SPCX", "RKLB", "BRK-B", "MSTR", "SQ", "NU", "SONY", "EA", "GLOB",
+    "ROKU", "PM", "MO", "KHC", "MDLZ", "UL", "TM", "RACE", "STLA",
+    "PBR", "VALE", "SHEL", "VIST", "AZN", "GSK", "MRNA",
 ]
 
 # ---------------------------------------------------------------
@@ -136,18 +137,15 @@ def main():
 
     if not encontrados:
         print("Ninguna accion cumplio la condicion en esta corrida.")
-        if TEST_MODE:
-            enviar_mail(
-                "🧪 Test - Alerta de precios EEUU (sin matches reales)",
-                "Este es un mail de prueba (TEST_MODE = True).\n\n"
-                "El script corrio bien y reviso {} tickers, pero ninguno cumplio "
-                "la condicion (suba {}% o mas + volumen {}x o mas del promedio de 2 dias habiles).\n\n"
-                "Si este mail te llego, el envio de mail funciona correctamente. "
-                "Cuando quieras dejar de recibir este aviso de prueba, poné "
-                "TEST_MODE = False en el script.".format(
-                    len(TICKERS), UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
-                ),
-            )
+        enviar_mail(
+            "📈 Movida con Volumen - NO HAY MATCH CON LAS ACCIONES",
+            "NO HAY MATCH CON LAS ACCIONES\n\n"
+            "Se revisaron {} tickers en esta corrida y ninguno cumplio la "
+            "condicion (suba {}% o mas + volumen {}x o mas del promedio de "
+            "2 dias habiles).".format(
+                len(TICKERS), UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
+            ),
+        )
         return
 
     encontrados.sort(key=lambda x: x["variacion_pct"], reverse=True)
