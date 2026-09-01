@@ -66,6 +66,10 @@ TICKERS = [
     "TSM", "ASML",
     "FCX", "NEM", "GOLD", "PAAS",
     "MELI",
+    "GEV", "TLN", "KLAC", "WDC", "IBKR", "WELL", "PLD", "LIN", "SHW", "NTRA",
+    "DELL", "SPCX", "RKLB", "BRK-B", "MSTR", "SQ", "NU", "SONY", "EA",
+    "GLOB", "ROKU", "PM", "MO", "KHC", "MDLZ", "UL", "TM", "RACE",
+    "STLA", "PBR", "VALE", "SHEL", "VIST", "AZN", "GSK", "MRNA",
 ]
 
 GMAIL_USER = os.environ["GMAIL_USER"]
