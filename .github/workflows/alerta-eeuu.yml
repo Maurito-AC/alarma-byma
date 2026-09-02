@@ -1,29 +1,27 @@
 # Guardar este archivo en: .github/workflows/alerta-eeuu.yml
 name: Alerta de precios EEUU
-
 on:
   schedule:
-    # Corre cada 15 minutos, de lunes a viernes,
-    # entre las 12:00 y 23:45 UTC (9:00 a 20:45 hora Argentina),
-    # para cubrir el rango pedido de 9:15 a 20hs con margen de sobra
-        - cron: "0 12-20 * * 1-5"
+    # Corre 3 veces por dia, de lunes a viernes, horario Argentina (UTC-3):
+    # 10:32 ART = 13:32 UTC
+    # 12:08 ART = 15:08 UTC
+    # 16:18 ART = 19:18 UTC
+    - cron: "32 13 * * 1-5"
+    - cron: "8 15 * * 1-5"
+    - cron: "18 19 * * 1-5"
   workflow_dispatch: {}   # permite tambien ejecutarlo a mano desde GitHub
-
 jobs:
   chequear-precios:
     runs-on: ubuntu-latest
     steps:
       - name: Clonar repo
         uses: actions/checkout@v4
-
       - name: Configurar Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Instalar dependencias
         run: pip install -r requirements.txt
-
       - name: Ejecutar alerta
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
