@@ -1,20 +1,17 @@
 # Guardar este archivo en: .github/workflows/alerta-premercado.yml
 name: Alerta Pre-Mercado
-
 on:
   schedule:
-    # Horario principal: 12:45 UTC = 9:45 hs Argentina
-    - cron: "45 12 * * 1-5"
-    # Horario de respaldo: 12:58 UTC = 9:58 hs Argentina.
+    # Horario principal: 11:35 UTC = 8:35 hs Argentina
+    - cron: "35 11 * * 1-5"
+    # Horario de respaldo: 12:00 UTC = 9:00 hs Argentina.
     # Solo se ejecuta de verdad si el horario principal no corrio
     # (o fallo) hoy - ver el paso "Verificar si ya corrio hoy".
-    - cron: "58 12 * * 1-5"
+    - cron: "0 12 * * 1-5"
   workflow_dispatch: {}   # permite ejecutarlo a mano tambien
-
 permissions:
   actions: read
   contents: read
-
 jobs:
   chequear-premercado:
     runs-on: ubuntu-latest
@@ -39,21 +36,17 @@ jobs:
           else
             echo "saltar=false" >> "$GITHUB_OUTPUT"
           fi
-
       - name: Clonar repo
         if: steps.chequeo.outputs.saltar != 'true'
         uses: actions/checkout@v4
-
       - name: Configurar Python
         if: steps.chequeo.outputs.saltar != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
       - name: Instalar dependencias
         if: steps.chequeo.outputs.saltar != 'true'
         run: pip install -r requirements.txt
-
       - name: Ejecutar alerta de pre-mercado
         if: steps.chequeo.outputs.saltar != 'true'
         env:
