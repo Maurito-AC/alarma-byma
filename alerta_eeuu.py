@@ -7,7 +7,7 @@ de acciones importantes de EEUU que tienen CEDEAR en BYMA.
 Condicion de alerta (las DOS deben cumplirse):
   1) Suba un 3% o mas en el dia (SOLO ALCISTA, no baja) - vela de
      hoy vs. vela de ayer.
-  2) El volumen de hoy sea 2x o mas el volumen PROMEDIO de los
+  2) El volumen de hoy sea 1.3x o mas el volumen PROMEDIO de los
      ultimos 2 dias habiles (no la vela inmediata anterior).
 
 Manda UN SOLO mail por corrida con todos los tickers que cumplen
