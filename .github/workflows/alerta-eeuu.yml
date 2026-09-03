@@ -1,6 +1,8 @@
 # Guardar este archivo en: .github/workflows/alerta-eeuu.yml
 name: Alerta de precios EEUU
 on:
+  repository_dispatch:
+    types: [eeuu-trigger]
   schedule:
     # Corre 3 veces por dia, de lunes a viernes, horario Argentina (UTC-3):
     # 10:32 ART = 13:32 UTC
