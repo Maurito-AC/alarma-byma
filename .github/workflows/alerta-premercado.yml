@@ -1,12 +1,14 @@
 # Guardar este archivo en: .github/workflows/alerta-premercado.yml
 name: Alerta Pre-Mercado
 on:
+  repository_dispatch:
+    types: [premercado-trigger]
   schedule:
-    # Horario principal: 11:35 UTC = 8:35 hs Argentina
+    # Horario principal: 11:35 UTC = 8:35 hs Argentina (respaldo del disparo externo)
     - cron: "35 11 * * 1-5"
     # Horario de respaldo: 12:00 UTC = 9:00 hs Argentina.
-    # Solo se ejecuta de verdad si el horario principal no corrio
-    # (o fallo) hoy - ver el paso "Verificar si ya corrio hoy".
+    # Solo se ejecuta de verdad si nadie corrio con exito hoy todavia
+    # (ni el disparo externo de cron-job.org ni el horario principal).
     - cron: "0 12 * * 1-5"
   workflow_dispatch: {}   # permite ejecutarlo a mano tambien
 permissions:
@@ -25,13 +27,12 @@ jobs:
           EXITOSAS=$(gh run list \
             --repo "${{ github.repository }}" \
             --workflow "alerta-premercado.yml" \
-            --event schedule \
             --status success \
-            --json createdAt \
-            --jq "[.[] | select(.createdAt | startswith(\"$HOY\"))] | length")
-          echo "Corridas 'schedule' exitosas hoy ($HOY): $EXITOSAS"
+            --json createdAt,event \
+            --jq "[.[] | select(.createdAt | startswith(\"$HOY\")) | select(.event == \"schedule\" or .event == \"repository_dispatch\")] | length")
+          echo "Corridas exitosas hoy ($HOY): $EXITOSAS"
           if [ "$EXITOSAS" -gt "0" ]; then
-            echo "El horario principal ya corrio bien hoy, se salta el respaldo."
+            echo "Ya corrio bien hoy (disparo externo o schedule), se salta esta corrida."
             echo "saltar=true" >> "$GITHUB_OUTPUT"
           else
             echo "saltar=false" >> "$GITHUB_OUTPUT"
