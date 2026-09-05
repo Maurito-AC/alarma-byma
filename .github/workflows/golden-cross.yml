@@ -1,0 +1,39 @@
+name: Golden Cross Scanner
+
+on:
+  # Disparo externo vía cron-job.org (rápido, sin el delay del cron nativo)
+  repository_dispatch:
+    types: [golden-cross-trigger]
+
+  # Respaldo nativo por si el disparo externo llegara a fallar algún día.
+  # 9:07 UTC = 06:07 ART, lunes (1) y jueves (4).
+  # El minuto ':07' (no ':00') es a propósito: GitHub recomienda evitar
+  # horarios "en punto" para los cron nativos, porque son los más
+  # demandados y sufren más delay. Igual usamos el disparo externo como
+  # vía principal por eso mismo.
+  schedule:
+    - cron: '7 9 * * 1,4'
+
+jobs:
+  golden-cross:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repo
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Instalar dependencias
+        run: pip install yfinance pandas
+
+      - name: Ejecutar escáner de Golden Cross
+        env:
+          # Ajustá estos nombres si en tu repo los Secrets se llaman distinto
+          # (tienen que coincidir con los que ya usa tu script de premercado)
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+        run: python golden_cross_scanner.py
