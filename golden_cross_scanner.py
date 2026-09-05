@@ -32,7 +32,7 @@ TICKERS = [
     # Nuevos CEDEARs incorporados por Banco Comafi (agosto 2026)
     "GEV", "TLN", "KLAC", "DELL", "WDC", "IBKR", "WELL", "PLD", "LIN", "SHW", "NTRA",
     # Nuevos tickers agregados (septiembre 2026)
-    "SPCX", "RKLB", "BRK-B", "MSTR", "SQ", "NU", "SONY", "EA", "GLOB",
+    "SPCX", "RKLB", "BRK-B", "MSTR", "XYZ", "NU", "SONY", "EA", "GLOB",
     "ROKU", "PM", "MO", "KHC", "MDLZ", "UL", "TM", "RACE", "STLA",
     "PBR", "VALE", "SHEL", "VIST", "AZN", "GSK", "MRNA",
 ]
