@@ -31,9 +31,7 @@ jobs:
 
       - name: Ejecutar escáner de Golden Cross
         env:
-          # Ajustá estos nombres si en tu repo los Secrets se llaman distinto
-          # (tienen que coincidir con los que ya usa tu script de premercado)
-          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
-          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          EMAIL_SENDER: ${{ secrets.GMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.TO_EMAIL }}
         run: python golden_cross_scanner.py
