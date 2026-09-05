@@ -1,42 +1,12 @@
-"""
-Alerta de Movidas con Volumen - Acciones de EEUU con CEDEAR en BYMA
---------------------------------------------------------------------
-Chequea el precio REAL en dolares (no el CEDEAR) de una lista amplia
-de acciones importantes de EEUU que tienen CEDEAR en BYMA.
-
-Condicion de alerta (las DOS deben cumplirse):
-  1) Suba un 3% o mas en el dia (SOLO ALCISTA, no baja) - vela de
-     hoy vs. vela de ayer.
-  2) El volumen de hoy sea 1.3x o mas el volumen PROMEDIO de los
-     ultimos 2 dias habiles (no la vela inmediata anterior).
-
-Manda UN SOLO mail por corrida con todos los tickers que cumplen
-la condicion (no un mail por ticker). Si ninguno cumple, manda
-igual un mail avisando "NO HAY MATCH CON LAS ACCIONES", para
-confirmar que la corrida se ejecuto bien.
-
-Esta version SIEMPRE imprime un resultado por cada ticker (motivo
-exacto incluido: match, sin match con los numeros, sin datos, o
-error especifico), para poder diagnosticar bien cualquier caso.
-"""
-
 import os
-import sys
 import smtplib
 from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+from datetime import datetime
+
+import pandas as pd
 import yfinance as yf
 
-sys.stdout.reconfigure(line_buffering=True)
-
-# ---------------------------------------------------------------
-# CONFIGURACION DE LA ALERTA
-# ---------------------------------------------------------------
-UMBRAL_PORCENTAJE = 3.0      # % minimo de suba en el dia (vela vs vela anterior)
-UMBRAL_VOLUMEN = 1.3         # veces el volumen PROMEDIO de los ultimos 2 dias habiles
-
-# ---------------------------------------------------------------
-# LISTA DE TICKERS - acciones importantes de EEUU con CEDEAR en BYMA
-# ---------------------------------------------------------------
 TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "NFLX",
     "ORCL", "ADBE", "CRM", "INTC", "AMD", "QCOM", "TXN", "AVGO",
@@ -62,104 +32,112 @@ TICKERS = [
     # Nuevos CEDEARs incorporados por Banco Comafi (agosto 2026)
     "GEV", "TLN", "KLAC", "DELL", "WDC", "IBKR", "WELL", "PLD", "LIN", "SHW", "NTRA",
     # Nuevos tickers agregados (septiembre 2026)
-    "SPCX", "RKLB", "BRK-B", "MSTR", "SQ", "NU", "SONY", "EA", "GLOB",
+    "SPCX", "RKLB", "BRK-B", "MSTR", "XYZ", "NU", "SONY", "EA", "GLOB",
     "ROKU", "PM", "MO", "KHC", "MDLZ", "UL", "TM", "RACE", "STLA",
     "PBR", "VALE", "SHEL", "VIST", "AZN", "GSK", "MRNA",
 ]
 
-# ---------------------------------------------------------------
-# CREDENCIALES (GitHub Secrets)
-# ---------------------------------------------------------------
-GMAIL_USER = os.environ["GMAIL_USER"]
-GMAIL_APP_PASSWORD = os.environ["GMAIL_APP_PASSWORD"]
-TO_EMAIL = os.environ.get("TO_EMAIL", GMAIL_USER)
+SMA_CORTA = 50
+SMA_LARGA = 200
+
+# 6 años de historia diaria: de ahí sale suficiente data semanal
+# (~300 semanas) para poder calcular SMA200 también en esa temporalidad.
+PERIODO_DESCARGA = "6y"
 
 
-def enviar_mail(asunto: str, cuerpo: str):
-    msg = MIMEText(cuerpo)
+def detectar_golden_cross(serie_cierre: pd.Series) -> bool:
+    """
+    True si en la última vela se confirmó el cruce ascendente:
+    - vela anterior: SMA50 <= SMA200
+    - vela actual:   SMA50 >  SMA200
+    (evita marcar tickers que ya vienen cruzados hace tiempo)
+    """
+    if len(serie_cierre) < SMA_LARGA + 2:
+        return False
+
+    sma50 = serie_cierre.rolling(SMA_CORTA).mean()
+    sma200 = serie_cierre.rolling(SMA_LARGA).mean()
+
+    if sma50.iloc[-2:].isna().any() or sma200.iloc[-2:].isna().any():
+        return False
+
+    cruzo_ahora = sma50.iloc[-1] > sma200.iloc[-1]
+    no_cruzado_antes = sma50.iloc[-2] <= sma200.iloc[-2]
+
+    return bool(cruzo_ahora and no_cruzado_antes)
+
+
+def enviar_mail(golden_daily: list[str], golden_weekly: list[str]) -> None:
+    remitente = os.environ["EMAIL_SENDER"]
+    password = os.environ["EMAIL_PASSWORD"]
+    destinatario = os.environ["EMAIL_TO"]
+
+    fecha = datetime.now().strftime("%d/%m/%Y")
+    total = len(golden_daily) + len(golden_weekly)
+
+    filas = ""
+    for t in golden_daily:
+        filas += f"<tr><td>{t}</td><td>Diario</td></tr>"
+    for t in golden_weekly:
+        filas += f"<tr><td>{t}</td><td>Semanal</td></tr>"
+
+    if total == 0:
+        cuerpo = f"<h2>NO HAY CRUCE GOLDEN CROSS</h2><p>No se detectaron cruces SMA50/SMA200 ascendentes el {fecha}.</p>"
+    else:
+        cuerpo = f"""
+        <h2>Golden Cross detectado(s)</h2>
+        <p>{fecha} - {total} ticker(s) con cruce ascendente reciente:</p>
+        <table border="1" cellpadding="6" cellspacing="0">
+            <tr><th>Ticker</th><th>Temporalidad</th></tr>
+            {filas}
+        </table>
+        """
+
+    asunto = f"NO HAY CRUCE GOLDEN CROSS - {fecha}" if total == 0 else f"Golden Cross - {fecha} ({total} señal(es))"
+
+    msg = MIMEMultipart("alternative")
     msg["Subject"] = asunto
-    msg["From"] = GMAIL_USER
-    msg["To"] = TO_EMAIL
+    msg["From"] = remitente
+    msg["To"] = destinatario
+    msg.attach(MIMEText(cuerpo, "html"))
+
     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
-        server.login(GMAIL_USER, GMAIL_APP_PASSWORD)
-        server.sendmail(GMAIL_USER, [TO_EMAIL], msg.as_string())
-    print(f"Mail enviado: {asunto}")
+        server.login(remitente, password)
+        server.sendmail(remitente, destinatario, msg.as_string())
 
 
-def chequear_ticker(ticker: str):
-    """
-    Devuelve SIEMPRE una tupla (resultado, motivo):
-      - resultado: dict si cumple la condicion, si no None
-      - motivo: string explicando el resultado (para loguear en main)
-    """
-    try:
-        data = yf.Ticker(ticker).history(period="1mo", interval="1d")
-        if data.empty:
-            return None, "sin datos disponibles"
-        if len(data) < 3:
-            return None, f"muy pocos datos historicos ({len(data)} velas)"
+def main() -> None:
+    print(f"Descargando {PERIODO_DESCARGA} de historial diario para {len(TICKERS)} tickers...")
+    data = yf.download(
+        TICKERS,
+        period=PERIODO_DESCARGA,
+        interval="1d",
+        auto_adjust=True,
+        threads=True,
+        progress=False,
+    )
 
-        cierre_hoy = float(data["Close"].iloc[-1])
-        cierre_ayer = float(data["Close"].iloc[-2])
-        volumen_hoy = float(data["Volume"].iloc[-1])
-        volumen_promedio_2d = float(data["Volume"].iloc[-3:-1].mean())
+    golden_daily = []
+    golden_weekly = []
 
-        if cierre_ayer == 0 or volumen_promedio_2d == 0:
-            return None, "cierre o volumen base en cero, no se puede calcular"
+    for ticker in TICKERS:
+        try:
+            cierre_diario = data["Close"][ticker].dropna()
+        except KeyError:
+            print(f"Sin datos para {ticker}, se salteó.")
+            continue
 
-        variacion_pct = (cierre_hoy - cierre_ayer) / cierre_ayer * 100
-        ratio_volumen = volumen_hoy / volumen_promedio_2d
-        cumple = (variacion_pct >= UMBRAL_PORCENTAJE) and (ratio_volumen >= UMBRAL_VOLUMEN)
+        if detectar_golden_cross(cierre_diario):
+            golden_daily.append(ticker)
 
-        if cumple:
-            return {
-                "ticker": ticker,
-                "precio": cierre_hoy,
-                "variacion_pct": variacion_pct,
-                "ratio_volumen": ratio_volumen,
-            }, f"MATCH +{variacion_pct:.1f}% vol x{ratio_volumen:.1f}"
+        cierre_semanal = cierre_diario.resample("W-FRI").last().dropna()
+        if detectar_golden_cross(cierre_semanal):
+            golden_weekly.append(ticker)
 
-        return None, f"sin match (+{variacion_pct:.1f}%, vol x{ratio_volumen:.1f})"
+    print(f"Golden Cross diario: {golden_daily}")
+    print(f"Golden Cross semanal: {golden_weekly}")
 
-    except Exception as e:
-        return None, f"ERROR: {type(e).__name__}: {e}"
-
-
-def main():
-    encontrados = []
-    print(f"Empezando a chequear {len(TICKERS)} tickers...")
-
-    for i, ticker in enumerate(TICKERS, start=1):
-        resultado, motivo = chequear_ticker(ticker)
-        print(f"[{i}/{len(TICKERS)}] {ticker}: {motivo}")
-        if resultado:
-            encontrados.append(resultado)
-
-    if not encontrados:
-        print("Ninguna accion cumplio la condicion en esta corrida.")
-        enviar_mail(
-            "📈 Movida con Volumen - NO HAY MATCH CON LAS ACCIONES",
-            "NO HAY MATCH CON LAS ACCIONES\n\n"
-            "Se revisaron {} tickers en esta corrida y ninguno cumplio la "
-            "condicion (suba {}% o mas + volumen {}x o mas del promedio de "
-            "2 dias habiles).".format(
-                len(TICKERS), UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
-            ),
-        )
-        return
-
-    encontrados.sort(key=lambda x: x["variacion_pct"], reverse=True)
-    lineas = [
-        f"{r['ticker']}: USD {r['precio']:.2f}  |  +{r['variacion_pct']:.1f}%  |  "
-        f"Volumen x{r['ratio_volumen']:.1f} del promedio de 2 dias habiles"
-        for r in encontrados
-    ]
-    cuerpo = "Acciones con suba de {}% o mas y volumen {}x o mas del promedio de 2 dias habiles:\n\n".format(
-        UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
-    ) + "\n".join(lineas)
-
-    asunto = f"📈 Movida con Volumen - {len(encontrados)} accion(es) detectada(s)"
-    enviar_mail(asunto, cuerpo)
+    enviar_mail(golden_daily, golden_weekly)
 
 
 if __name__ == "__main__":
