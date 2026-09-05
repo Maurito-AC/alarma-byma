@@ -1,6 +1,9 @@
 name: Golden Cross Scanner
 
 on:
+  # Permite el botón "Run workflow" manual en la pestaña Actions
+  workflow_dispatch:
+
   # Disparo externo vía cron-job.org (rápido, sin el delay del cron nativo)
   repository_dispatch:
     types: [golden-cross-trigger]
