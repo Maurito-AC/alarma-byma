@@ -1,6 +1,1 @@
-[
-  {"ticker": "GGAL.BA",  "tipo": "MAYOR", "precio": 6500.0,  "nota": "Ruptura resistencia"},
-  {"ticker": "YPFD.BA",  "tipo": "MENOR", "precio": 42000.0, "nota": "Stop loss"},
-  {"ticker": "MELI.BA",  "tipo": "MAYOR", "precio": 2800.0,  "nota": "Entrada long"},
-  {"ticker": "AAPL.BA",  "tipo": "MENOR", "precio": 230.0,   "nota": "Soporte clave"}
-]
+Elimino alarmas.json
