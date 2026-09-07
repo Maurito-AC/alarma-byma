@@ -3,9 +3,12 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import yfinance as yf
+
+ZONA_ART = ZoneInfo("America/Argentina/Buenos_Aires")
 
 TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "NFLX",
@@ -86,7 +89,9 @@ def enviar_mail(golden_daily: list[str], golden_weekly: list[str]) -> None:
     password = os.environ["EMAIL_PASSWORD"]
     destinatario = os.environ["EMAIL_TO"]
 
-    fecha = datetime.now().strftime("%d/%m/%Y")
+    ahora_art = datetime.now(ZONA_ART)
+    fecha = ahora_art.strftime("%d/%m/%Y")
+    hora = ahora_art.strftime("%H:%M")
     total = len(golden_daily) + len(golden_weekly)
 
     filas = ""
@@ -96,18 +101,22 @@ def enviar_mail(golden_daily: list[str], golden_weekly: list[str]) -> None:
         filas += f"<tr><td>{t}</td><td>Semanal</td></tr>"
 
     if total == 0:
-        cuerpo = f"<h2>NO HAY CRUCE GOLDEN CROSS</h2><p>No se detectaron cruces SMA50/SMA200 ascendentes el {fecha}.</p>"
+        cuerpo = f"<h2>NO HAY CRUCE GOLDEN CROSS</h2><p>No se detectaron cruces SMA50/SMA200 ascendentes. Chequeo realizado el {fecha} a las {hora} hs (ART).</p>"
     else:
         cuerpo = f"""
         <h2>Golden Cross detectado(s)</h2>
-        <p>{fecha} - {total} ticker(s) con cruce ascendente reciente:</p>
+        <p>Chequeo realizado el {fecha} a las {hora} hs (ART) - {total} ticker(s) con cruce ascendente reciente:</p>
         <table border="1" cellpadding="6" cellspacing="0">
             <tr><th>Ticker</th><th>Temporalidad</th></tr>
             {filas}
         </table>
         """
 
-    asunto = f"NO HAY CRUCE GOLDEN CROSS - {fecha}" if total == 0 else f"Golden Cross - {fecha} ({total} señal(es))"
+    asunto = (
+        f"NO HAY CRUCE GOLDEN CROSS - {fecha} {hora}hs"
+        if total == 0
+        else f"Golden Cross - {fecha} {hora}hs ({total} señal(es))"
+    )
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = asunto
