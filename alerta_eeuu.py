@@ -22,9 +22,13 @@ import os
 import sys
 import smtplib
 from email.mime.text import MIMEText
+from datetime import datetime
+from zoneinfo import ZoneInfo
 import yfinance as yf
 
 sys.stdout.reconfigure(line_buffering=True)
+
+ZONA_ART = ZoneInfo("America/Argentina/Buenos_Aires")
 
 # ---------------------------------------------------------------
 # CONFIGURACION DE LA ALERTA
@@ -125,6 +129,10 @@ def chequear_ticker(ticker: str):
 
 
 def main():
+    ahora_art = datetime.now(ZONA_ART)
+    fecha = ahora_art.strftime("%d/%m/%Y")
+    hora = ahora_art.strftime("%H:%M")
+
     encontrados = []
     print(f"Empezando a chequear {len(TICKERS)} tickers...")
 
@@ -138,14 +146,15 @@ def main():
         print("Ninguna accion cumplio la condicion en esta corrida.")
         if TEST_MODE:
             enviar_mail(
-                "🧪 Test - Alerta de precios EEUU (sin matches reales)",
+                f"🧪 Test - Alerta de precios EEUU (sin matches reales) - {fecha} {hora}hs",
                 "Este es un mail de prueba (TEST_MODE = True).\n\n"
+                "Chequeo realizado el {} a las {} hs (ART).\n\n"
                 "El script corrio bien y reviso {} tickers, pero ninguno cumplio "
                 "la condicion (suba {}% o mas + volumen {}x o mas del promedio de 2 dias habiles).\n\n"
                 "Si este mail te llego, el envio de mail funciona correctamente. "
                 "Cuando quieras dejar de recibir este aviso de prueba, poné "
                 "TEST_MODE = False en el script.".format(
-                    len(TICKERS), UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
+                    fecha, hora, len(TICKERS), UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
                 ),
             )
         return
@@ -156,14 +165,17 @@ def main():
         f"Volumen x{r['ratio_volumen']:.1f} del promedio de 2 dias habiles"
         for r in encontrados
     ]
-    cuerpo = "Acciones con suba de {}% o mas y volumen {}x o mas del promedio de 2 dias habiles:\n\n".format(
-        UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
-    ) + "\n".join(lineas)
+    cuerpo = (
+        f"Chequeo realizado el {fecha} a las {hora} hs (ART).\n\n"
+        + "Acciones con suba de {}% o mas y volumen {}x o mas del promedio de 2 dias habiles:\n\n".format(
+            UMBRAL_PORCENTAJE, UMBRAL_VOLUMEN
+        )
+        + "\n".join(lineas)
+    )
 
-    asunto = f"📈 Movida con Volumen - {len(encontrados)} accion(es) detectada(s)"
+    asunto = f"📈 Movida con Volumen - {len(encontrados)} accion(es) detectada(s) - {fecha} {hora}hs"
     enviar_mail(asunto, cuerpo)
 
 
 if __name__ == "__main__":
     main()
-
