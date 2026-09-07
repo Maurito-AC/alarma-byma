@@ -19,8 +19,8 @@ Condicion de alerta (las DOS deben cumplirse):
   2) El volumen de pre-mercado de hoy es 3x o mas el promedio del
      volumen de pre-mercado de los ultimos 2 dias habiles
 
-Manda UN SOLO mail (HTML, con fecha y tamaño legible en celular) con
-todos los tickers que cumplen la condicion.
+Manda UN SOLO mail (HTML, con fecha, hora y tamaño legible en celular)
+con todos los tickers que cumplen la condicion.
 
 Esta version SIEMPRE imprime un resultado por cada ticker (motivo
 del descarte incluido), para poder diagnosticar bien cualquier caso.
@@ -31,6 +31,7 @@ import sys
 import smtplib
 import datetime
 from email.mime.text import MIMEText
+from zoneinfo import ZoneInfo
 import yfinance as yf
 
 sys.stdout.reconfigure(line_buffering=True)
@@ -87,13 +88,19 @@ MESES_ES = {
 }
 
 
-def fecha_hoy_ar_texto() -> str:
+def fecha_y_hora_hoy_ar() -> tuple[str, str]:
+    """Devuelve (fecha_texto, hora_texto) en hora Argentina.
+    fecha_texto: 'Lunes 7 de Septiembre de 2026'
+    hora_texto:  '10:02'
+    """
     ahora = datetime.datetime.now(datetime.timezone.utc).astimezone(
-        __import__("zoneinfo").ZoneInfo(ZONA_ART)
+        ZoneInfo(ZONA_ART)
     )
     dia_semana = DIAS_ES[ahora.weekday()]
     mes = MESES_ES[ahora.month]
-    return f"{dia_semana} {ahora.day} de {mes} de {ahora.year}"
+    fecha_texto = f"{dia_semana} {ahora.day} de {mes} de {ahora.year}"
+    hora_texto = ahora.strftime("%H:%M")
+    return fecha_texto, hora_texto
 
 
 def enviar_mail(asunto: str, cuerpo_html: str):
@@ -124,7 +131,7 @@ def chequear_ticker(ticker: str):
         data.index = data.index.tz_convert(ZONA_NY)
 
         hoy = datetime.datetime.now(datetime.timezone.utc).astimezone(
-            __import__("zoneinfo").ZoneInfo(ZONA_NY)
+            ZoneInfo(ZONA_NY)
         ).date()
 
         dias_disponibles = sorted(set(data.index.date))
@@ -184,7 +191,7 @@ def chequear_ticker(ticker: str):
         return None, f"ERROR: {type(e).__name__}: {e}"
 
 
-def armar_html(encontrados, fecha_texto: str) -> str:
+def armar_html(encontrados, fecha_texto: str, hora_texto: str) -> str:
     """Arma el cuerpo del mail en HTML, con tamaño de letra mediano
     pensado para que se lea comodo desde el celular."""
     estilo_base = (
@@ -196,7 +203,7 @@ def armar_html(encontrados, fecha_texto: str) -> str:
 <html>
   <body style="{estilo_base}margin:0;padding:16px;">
     <p style="font-size:18px;font-weight:bold;margin:0 0 4px 0;">🌅 Alerta Pre-Mercado</p>
-    <p style="font-size:15px;color:#555;margin:0 0 16px 0;">{fecha_texto}</p>
+    <p style="font-size:15px;color:#555;margin:0 0 16px 0;">{fecha_texto} - {hora_texto} hs (ART)</p>
     <p style="font-size:18px;font-weight:bold;color:#c00000;margin:0;">
       NO HAY MATCH CON LAS ACCIONES
     </p>
@@ -221,7 +228,7 @@ def armar_html(encontrados, fecha_texto: str) -> str:
 <html>
   <body style="{estilo_base}margin:0;padding:16px;">
     <p style="font-size:18px;font-weight:bold;margin:0 0 4px 0;">🌅 Alerta Pre-Mercado</p>
-    <p style="font-size:15px;color:#555;margin:0 0 16px 0;">{fecha_texto}</p>
+    <p style="font-size:15px;color:#555;margin:0 0 16px 0;">{fecha_texto} - {hora_texto} hs (ART)</p>
     <p style="font-size:17px;font-weight:bold;margin:0 0 10px 0;">
       {len(encontrados)} accion(es) detectada(s)
     </p>
@@ -241,8 +248,8 @@ def armar_html(encontrados, fecha_texto: str) -> str:
 
 def main():
     encontrados = []
-    fecha_texto = fecha_hoy_ar_texto()
-    print(f"Empezando a chequear {len(TICKERS)} tickers... ({fecha_texto})")
+    fecha_texto, hora_texto = fecha_y_hora_hoy_ar()
+    print(f"Empezando a chequear {len(TICKERS)} tickers... ({fecha_texto} - {hora_texto} hs)")
 
     for i, ticker in enumerate(TICKERS, start=1):
         resultado, motivo = chequear_ticker(ticker)
@@ -253,14 +260,14 @@ def main():
     if not encontrados:
         print("Ninguna accion cumplio la condicion hoy.")
         enviar_mail(
-            "🌅 Pre-Mercado - NO HAY MATCH CON LAS ACCIONES",
-            armar_html([], fecha_texto),
+            f"🌅 Pre-Mercado - NO HAY MATCH CON LAS ACCIONES - {hora_texto}hs",
+            armar_html([], fecha_texto, hora_texto),
         )
         return
 
     encontrados.sort(key=lambda x: x["variacion_pct"], reverse=True)
-    asunto = f"🌅 Pre-Mercado - {len(encontrados)} accion(es) detectada(s)"
-    cuerpo_html = armar_html(encontrados, fecha_texto)
+    asunto = f"🌅 Pre-Mercado - {len(encontrados)} accion(es) detectada(s) - {hora_texto}hs"
+    cuerpo_html = armar_html(encontrados, fecha_texto, hora_texto)
     enviar_mail(asunto, cuerpo_html)
 
 
