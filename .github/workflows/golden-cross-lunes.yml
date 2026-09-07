@@ -1,0 +1,29 @@
+name: Golden Cross Scanner - Lunes
+on:
+  # Permite el botón "Run workflow" manual en la pestaña Actions
+  workflow_dispatch:
+  # Disparo externo vía cron-job.org (rápido, sin el delay del cron nativo)
+  repository_dispatch:
+    types: [golden-cross-lunes-trigger]
+  # Respaldo nativo por si el disparo externo llegara a fallar algún día.
+  # 9:07 UTC = 06:07 ART, solo lunes.
+  schedule:
+    - cron: '7 9 * * 1'
+jobs:
+  golden-cross:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout del repo
+        uses: actions/checkout@v4
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Instalar dependencias
+        run: pip install yfinance pandas
+      - name: Ejecutar escáner de Golden Cross
+        env:
+          EMAIL_SENDER: ${{ secrets.GMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.TO_EMAIL }}
+        run: python golden_cross_scanner.py
