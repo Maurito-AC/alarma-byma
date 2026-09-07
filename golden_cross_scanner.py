@@ -67,6 +67,20 @@ def detectar_golden_cross(serie_cierre: pd.Series) -> bool:
     return bool(cruzo_ahora and no_cruzado_antes)
 
 
+def cierre_semanal_confirmado(serie_cierre: pd.Series) -> pd.Series:
+    """
+    Cierre semanal (W-FRI) pero descartando la última vela si la semana
+    todavía no terminó. Sin esto, correr un jueves (o cualquier día que
+    no sea viernes) hace que resample() tome el precio de mitad de semana
+    y lo trate como si fuera el cierre semanal confirmado, generando
+    falsos positivos de golden cross.
+    """
+    semanal = serie_cierre.resample("W-FRI").last().dropna()
+    if serie_cierre.index[-1].dayofweek != 4:  # 4 = viernes
+        semanal = semanal.iloc[:-1]
+    return semanal
+
+
 def enviar_mail(golden_daily: list[str], golden_weekly: list[str]) -> None:
     remitente = os.environ["EMAIL_SENDER"]
     password = os.environ["EMAIL_PASSWORD"]
@@ -130,7 +144,7 @@ def main() -> None:
         if detectar_golden_cross(cierre_diario):
             golden_daily.append(ticker)
 
-        cierre_semanal = cierre_diario.resample("W-FRI").last().dropna()
+        cierre_semanal = cierre_semanal_confirmado(cierre_diario)
         if detectar_golden_cross(cierre_semanal):
             golden_weekly.append(ticker)
 
