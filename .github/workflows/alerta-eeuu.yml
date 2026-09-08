@@ -16,17 +16,46 @@ jobs:
   chequear-precios:
     runs-on: ubuntu-latest
     steps:
+      - name: Verificar si el disparo externo ya cubrio este horario
+        id: check
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          AHORA=$(date -u +%s)
+          LIMITE=$((AHORA - 5400))  # 90 minutos en segundos
+          RUNS=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/alerta-eeuu.yml/runs?event=repository_dispatch&status=success&per_page=5")
+          RECIENTE=$(echo "$RUNS" | python3 -c "
+          import sys, json, datetime
+          data = json.load(sys.stdin)
+          limite = datetime.datetime.fromtimestamp($LIMITE, tz=datetime.timezone.utc)
+          recientes = [r for r in data.get('workflow_runs', [])
+                       if datetime.datetime.fromisoformat(r['created_at'].replace('Z','+00:00')) > limite]
+          print(len(recientes))
+          ")
+          if [ "$RECIENTE" -gt "0" ]; then
+            echo "should_run=false" >> "$GITHUB_OUTPUT"
+            echo "El disparo externo ya corrio hace menos de 90 minutos, se salta el backup nativo."
+          else
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+          fi
       - name: Clonar repo
+        if: github.event_name != 'schedule' || steps.check.outputs.should_run == 'true'
         uses: actions/checkout@v4
       - name: Configurar Python
+        if: github.event_name != 'schedule' || steps.check.outputs.should_run == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
       - name: Instalar dependencias
+        if: github.event_name != 'schedule' || steps.check.outputs.should_run == 'true'
         run: pip install -r requirements.txt
       - name: Ejecutar alerta
+        if: github.event_name != 'schedule' || steps.check.outputs.should_run == 'true'
         env:
           GMAIL_USER: ${{ secrets.GMAIL_USER }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
         run: python alerta_eeuu.py
+
