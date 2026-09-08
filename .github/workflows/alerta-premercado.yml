@@ -10,6 +10,9 @@ on:
     # Solo se ejecuta de verdad si nadie corrio con exito hoy todavia
     # (ni el disparo externo de cron-job.org ni el horario principal).
     - cron: "0 12 * * 1-5"
+    # Ultimo colchon: 12:30 UTC = 9:30 hs Argentina.
+    # Mismo chequeo de "ya corrio hoy" aplica.
+    - cron: "30 12 * * 1-5"
   workflow_dispatch: {}   # permite ejecutarlo a mano tambien
 permissions:
   actions: read
