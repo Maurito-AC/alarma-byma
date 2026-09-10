@@ -1,56 +1,51 @@
 name: Golden Cross Scanner - Jueves
 on:
-  # Permite el botón "Run workflow" manual en la pestaña Actions
   workflow_dispatch:
-  # Disparo externo vía cron-job.org (rápido, sin el delay del cron nativo)
   repository_dispatch:
     types: [golden-cross-jueves-trigger]
-  # Respaldo nativo por si el disparo externo llegara a fallar algún día.
-  # 9:07 UTC = 06:07 ART, solo jueves.
   schedule:
+    # Respaldo nativo por si el disparo externo llegara a fallar.
+    # 9:07 UTC = 06:07 ART, solo jueves.
     - cron: '7 9 * * 4'
 jobs:
   golden-cross:
     runs-on: ubuntu-latest
     steps:
-      - name: Verificar si el disparo externo ya corrio hoy
-        id: check
-        if: github.event_name == 'schedule'
+      - name: Verificar si ya corrio hoy con exito (cualquier disparo)
+        id: chequeo
+        if: github.event_name != 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          HOY_UTC=$(date -u +%F)
-          RUNS=$(curl -s -H "Authorization: Bearer $GH_TOKEN" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/golden-cross-jueves.yml/runs?event=repository_dispatch&status=success&per_page=5")
-          YA_CORRIO=$(echo "$RUNS" | python3 -c "
-          import sys, json
-          data = json.load(sys.stdin)
-          hoy = '$HOY_UTC'
-          corrio = any(r['created_at'][:10] == hoy for r in data.get('workflow_runs', []))
-          print('true' if corrio else 'false')
-          ")
-          if [ "$YA_CORRIO" = "true" ]; then
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "El disparo externo ya corrio hoy con exito, se salta el backup nativo."
+          HOY=$(date -u +%Y-%m-%d)
+          EXITOSAS=$(gh run list \
+            --repo "${{ github.repository }}" \
+            --workflow "golden-cross-jueves.yml" \
+            --status success \
+            --json createdAt,event \
+            --jq "[.[] | select(.createdAt | startswith(\"$HOY\")) | select(.event == \"schedule\" or .event == \"repository_dispatch\")] | length")
+          echo "Corridas exitosas hoy ($HOY): $EXITOSAS"
+          if [ "$EXITOSAS" -gt "0" ]; then
+            echo "Ya corrio bien hoy, se salta esta corrida."
+            echo "saltar=true" >> "$GITHUB_OUTPUT"
           else
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            echo "saltar=false" >> "$GITHUB_OUTPUT"
           fi
       - name: Checkout del repo
-        if: github.event_name != 'schedule' || steps.check.outputs.should_run == 'true'
+        if: steps.chequeo.outputs.saltar != 'true'
         uses: actions/checkout@v4
       - name: Configurar Python
-        if: github.event_name != 'schedule' || steps.check.outputs.should_run == 'true'
+        if: steps.chequeo.outputs.saltar != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
       - name: Instalar dependencias
-        if: github.event_name != 'schedule' || steps.check.outputs.should_run == 'true'
+        if: steps.chequeo.outputs.saltar != 'true'
         run: pip install yfinance pandas
       - name: Ejecutar escáner de Golden Cross
-        if: github.event_name != 'schedule' || steps.check.outputs.should_run == 'true'
+        if: steps.chequeo.outputs.saltar != 'true'
         env:
           EMAIL_SENDER: ${{ secrets.GMAIL_USER }}
           EMAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.TO_EMAIL }}
         run: python golden_cross_scanner.py
-
