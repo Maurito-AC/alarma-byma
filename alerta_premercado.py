@@ -68,7 +68,7 @@ TICKERS = [
     "FCX", "NEM", "GOLD", "PAAS",
     "MELI",
     "GEV", "TLN", "KLAC", "WDC", "IBKR", "WELL", "PLD", "LIN", "SHW", "NTRA",
-    "DELL", "SPCX", "RKLB", "BRK-B", "MSTR", "SQ", "NU", "SONY", "EA",
+    "DELL", "SPCX", "RKLB", "BRK-B", "MSTR", "XYZ", "NU", "SONY", "EA",
     "GLOB", "ROKU", "PM", "MO", "KHC", "MDLZ", "UL", "TM", "RACE",
     "STLA", "PBR", "VALE", "SHEL", "VIST", "AZN", "GSK", "MRNA",
 ]
@@ -273,3 +273,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
