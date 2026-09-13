@@ -42,7 +42,7 @@ UMBRAL_VOLUMEN = 1.3         # veces el volumen PROMEDIO de los ultimos 2 dias h
 TEST_MODE = False
 
 # ---------------------------------------------------------------
-# LISTA DE TICKERS - ~100 acciones importantes de EEUU con CEDEAR en BYMA
+# LISTA DE TICKERS - acciones importantes de EEUU con CEDEAR en BYMA
 # ---------------------------------------------------------------
 TICKERS = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "NFLX",
@@ -68,6 +68,11 @@ TICKERS = [
     "MELI",
     # Nuevos CEDEARs incorporados por Banco Comafi (agosto 2026)
     "GEV", "TLN", "KLAC", "DELL", "WDC", "IBKR", "WELL", "PLD", "LIN", "SHW", "NTRA",
+    # Nuevos tickers agregados (septiembre 2026) - alineado con
+    # alerta_premercado.py y golden_cross_scanner.py
+    "SPCX", "RKLB", "BRK-B", "MSTR", "XYZ", "NU", "SONY", "EA", "GLOB",
+    "ROKU", "PM", "MO", "KHC", "MDLZ", "UL", "TM", "RACE", "STLA",
+    "PBR", "VALE", "SHEL", "VIST", "AZN", "GSK", "MRNA",
 ]
 
 # ---------------------------------------------------------------
@@ -179,3 +184,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
