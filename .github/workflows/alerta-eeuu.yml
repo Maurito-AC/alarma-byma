@@ -4,12 +4,10 @@ on:
   repository_dispatch:
     types: [eeuu-trigger]
   schedule:
-    # Corre 3 veces por dia, de lunes a viernes, horario Argentina (UTC-3):
+    # Corre 2 veces por dia, de lunes a viernes, horario Argentina (UTC-3):
     # 10:32 ART = 13:32 UTC
-    # 12:08 ART = 15:08 UTC
     # 16:18 ART = 19:18 UTC
     - cron: "32 13 * * 1-5"
-    - cron: "8 15 * * 1-5"
     - cron: "18 19 * * 1-5"
   workflow_dispatch: {}   # permite tambien ejecutarlo a mano desde GitHub
 jobs:
@@ -58,4 +56,3 @@ jobs:
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           TO_EMAIL: ${{ secrets.TO_EMAIL }}
         run: python alerta_eeuu.py
-
