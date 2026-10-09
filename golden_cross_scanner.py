@@ -12,6 +12,16 @@ import yfinance as yf
 ZONA_ART = ZoneInfo("America/Argentina/Buenos_Aires")
 
 # ---------------------------------------------------------------
+# MODO: lo define el workflow con la variable de entorno MODO
+#   diario  -> velas diarias (1 año de historial)
+#   semanal -> velas semanales (5 años de historial)
+# ---------------------------------------------------------------
+MODO = os.environ.get("MODO", "diario").strip().lower()
+ES_SEMANAL = MODO == "semanal"
+NOMBRE_MODO = "Semanal" if ES_SEMANAL else "Diario"
+PERIODO_DESCARGA = "5y" if ES_SEMANAL else "1y"
+
+# ---------------------------------------------------------------
 # WATCHLIST (formato Yahoo Finance)
 # ---------------------------------------------------------------
 TICKERS_EEUU = [
@@ -62,21 +72,13 @@ TICKERS = list(dict.fromkeys(
 SMA_CORTA = 50
 SMA_LARGA = 200
 
-# "Mas de 2 velas": la SMA50 tiene que llevar al menos 3 velas seguidas por encima
-# de la SMA200 (la vela del cruce cuenta como la 1).
-# Corriendo todos los dias, se avisa solo cuando tiene EXACTAMENTE 3 velas
-# (asi cada cruce avisa una sola vez).
-VELAS_MIN_DIARIO = 3
-VELAS_MAX_DIARIO = 3
+# "Mas de 2 velas": la SMA50 tiene que llevar exactamente 3 velas seguidas por encima
+# de la SMA200 (la vela del cruce cuenta como la 1). Como cada modo corre una vez por
+# vela (diario: 1 por dia habil / semanal: 1 por semana), cada cruce avisa una sola vez.
+# Poner 1 para avisar en el momento mismo del cruce.
+VELAS_CONFIRMACION = 3
 
-# El semanal necesita ~4 años de historia (SMA200 de 200 semanas).
-INCLUIR_SEMANAL = False
-VELAS_MIN_SEMANAL = 3
-VELAS_MAX_SEMANAL = 3
-
-PERIODO_DESCARGA = "6y" if INCLUIR_SEMANAL else "1y"
-
-TAMANO_TANDA = 60      # tickers por descarga (evita bloqueos de Yahoo)
+TAMANO_TANDA = 60       # tickers por descarga (evita bloqueos de Yahoo)
 PAUSA_ENTRE_TANDAS = 2  # segundos
 
 
@@ -86,9 +88,6 @@ def velas_desde_golden_cross(serie_cierre: pd.Series) -> int | None:
     (la vela del cruce cuenta como 1). None si la SMA50 no esta arriba en la ultima
     vela o si no se puede confirmar un cruce real.
     """
-    if len(serie_cierre) < SMA_LARGA + 2:
-        return None
-
     sma50 = serie_cierre.rolling(SMA_CORTA).mean()
     sma200 = serie_cierre.rolling(SMA_LARGA).mean()
 
@@ -110,23 +109,21 @@ def velas_desde_golden_cross(serie_cierre: pd.Series) -> int | None:
     return cuenta
 
 
-def detectar_golden_cross(serie_cierre: pd.Series, vmin: int, vmax: int) -> int | None:
-    n = velas_desde_golden_cross(serie_cierre)
-    if n is not None and vmin <= n <= vmax:
-        return n
-    return None
-
-
 def cierre_semanal_confirmado(serie_cierre: pd.Series) -> pd.Series:
-    """Cierre semanal (W-FRI) descartando la semana en curso si no es viernes."""
+    """
+    Cierre semanal (W-FRI). Descarta la ultima semana solo si todavia no termino
+    (su viernes es hoy o futuro). Asi una semana con feriado en viernes
+    (ej. Viernes Santo) se conserva correctamente.
+    """
     semanal = serie_cierre.resample("W-FRI").last().dropna()
-    if serie_cierre.index[-1].dayofweek != 4:
+    hoy = datetime.now(ZONA_ART).date()
+    if len(semanal) > 0 and semanal.index[-1].date() >= hoy:
         semanal = semanal.iloc[:-1]
     return semanal
 
 
 def descargar_cierres(tickers: list[str]) -> dict[str, pd.Series]:
-    """Descarga en tandas y devuelve {ticker: serie de cierres}."""
+    """Descarga en tandas y devuelve {ticker: serie de cierres diarios}."""
     cierres = {}
     for i in range(0, len(tickers), TAMANO_TANDA):
         tanda = tickers[i:i + TAMANO_TANDA]
@@ -156,7 +153,7 @@ def descargar_cierres(tickers: list[str]) -> dict[str, pd.Series]:
     return cierres
 
 
-def enviar_mail(golden_daily, golden_weekly, sin_datos) -> None:
+def enviar_mail(senales, sin_datos, insuficientes) -> None:
     remitente = os.environ["EMAIL_SENDER"]
     password = os.environ["EMAIL_PASSWORD"]
     destinatario = os.environ["EMAIL_TO"]
@@ -164,26 +161,22 @@ def enviar_mail(golden_daily, golden_weekly, sin_datos) -> None:
     ahora_art = datetime.now(ZONA_ART)
     fecha = ahora_art.strftime("%d/%m/%Y")
     hora = ahora_art.strftime("%H:%M")
-    total = len(golden_daily) + len(golden_weekly)
-
-    filas = ""
-    for t, n in golden_daily:
-        filas += f"<tr><td>{t}</td><td>Diario</td><td>{n}</td></tr>"
-    for t, n in golden_weekly:
-        filas += f"<tr><td>{t}</td><td>Semanal</td><td>{n}</td></tr>"
+    total = len(senales)
+    unidad = "semanas" if ES_SEMANAL else "velas diarias"
 
     if total == 0:
         cuerpo = (
-            f"<h2>NO HAY GOLDEN CROSS CONFIRMADO</h2>"
-            f"<p>Ningún ticker tiene la SMA50 con más de 2 velas por encima de la SMA200 "
-            f"desde un cruce reciente. Chequeo realizado el {fecha} a las {hora} hs (ART).</p>"
+            f"<h2>NO HAY GOLDEN CROSS {NOMBRE_MODO.upper()} CONFIRMADO</h2>"
+            f"<p>Ningún ticker tiene la SMA50 con más de 2 velas ({NOMBRE_MODO.lower()}s) por encima "
+            f"de la SMA200 desde un cruce reciente. Chequeo realizado el {fecha} a las {hora} hs (ART).</p>"
         )
     else:
+        filas = "".join(f"<tr><td>{t}</td><td>{n}</td></tr>" for t, n in senales)
         cuerpo = f"""
-        <h2>Golden Cross confirmado(s)</h2>
+        <h2>Golden Cross {NOMBRE_MODO} confirmado(s)</h2>
         <p>Chequeo realizado el {fecha} a las {hora} hs (ART) - {total} ticker(s) con la SMA50 más de 2 velas por encima de la SMA200:</p>
         <table border="1" cellpadding="6" cellspacing="0">
-            <tr><th>Ticker</th><th>Temporalidad</th><th>Velas desde el cruce</th></tr>
+            <tr><th>Ticker</th><th>Velas desde el cruce ({unidad})</th></tr>
             {filas}
         </table>
         """
@@ -193,11 +186,16 @@ def enviar_mail(golden_daily, golden_weekly, sin_datos) -> None:
             f"<p style='color:#666;font-size:12px'>Sin datos en Yahoo ({len(sin_datos)}): "
             f"{', '.join(sin_datos)}</p>"
         )
+    if insuficientes:
+        cuerpo += (
+            f"<p style='color:#666;font-size:12px'>Historial insuficiente para la SMA200 "
+            f"({len(insuficientes)}): {', '.join(insuficientes)}</p>"
+        )
 
     asunto = (
-        f"NO HAY GOLDEN CROSS CONFIRMADO - {fecha} {hora}hs"
+        f"NO HAY GOLDEN CROSS {NOMBRE_MODO.upper()} CONFIRMADO - {fecha} {hora}hs"
         if total == 0
-        else f"Golden Cross confirmado - {fecha} {hora}hs ({total} señal(es))"
+        else f"Golden Cross {NOMBRE_MODO} confirmado - {fecha} {hora}hs ({total} señal(es))"
     )
 
     msg = MIMEMultipart("alternative")
@@ -212,29 +210,29 @@ def enviar_mail(golden_daily, golden_weekly, sin_datos) -> None:
 
 
 def main() -> None:
-    print(f"Analizando {len(TICKERS)} tickers ({PERIODO_DESCARGA} de historial diario)...")
+    print(f"MODO: {NOMBRE_MODO} | {len(TICKERS)} tickers | {PERIODO_DESCARGA} de historial diario")
     cierres = descargar_cierres(TICKERS)
 
-    golden_daily = []
-    golden_weekly = []
+    senales = []
+    insuficientes = []
     sin_datos = [t for t in TICKERS if t not in cierres]
 
     for ticker, cierre_diario in cierres.items():
-        n_diario = detectar_golden_cross(cierre_diario, VELAS_MIN_DIARIO, VELAS_MAX_DIARIO)
-        if n_diario is not None:
-            golden_daily.append((ticker, n_diario))
+        serie = cierre_semanal_confirmado(cierre_diario) if ES_SEMANAL else cierre_diario
 
-        if INCLUIR_SEMANAL:
-            cierre_semanal = cierre_semanal_confirmado(cierre_diario)
-            n_semanal = detectar_golden_cross(cierre_semanal, VELAS_MIN_SEMANAL, VELAS_MAX_SEMANAL)
-            if n_semanal is not None:
-                golden_weekly.append((ticker, n_semanal))
+        if len(serie) < SMA_LARGA + 2:
+            insuficientes.append(ticker)
+            continue
 
-    print(f"Golden Cross diario confirmado: {golden_daily}")
-    print(f"Golden Cross semanal confirmado: {golden_weekly}")
+        n = velas_desde_golden_cross(serie)
+        if n is not None and n == VELAS_CONFIRMACION:
+            senales.append((ticker, n))
+
+    print(f"Golden Cross {NOMBRE_MODO.lower()} confirmado: {senales}")
     print(f"Sin datos ({len(sin_datos)}): {sin_datos}")
+    print(f"Historial insuficiente ({len(insuficientes)}): {insuficientes}")
 
-    enviar_mail(golden_daily, golden_weekly, sin_datos)
+    enviar_mail(senales, sin_datos, insuficientes)
 
 
 if __name__ == "__main__":
