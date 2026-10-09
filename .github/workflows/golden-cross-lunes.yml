@@ -5,11 +5,12 @@ on:
     types: [golden-cross-lunes-trigger]
   schedule:
     # Respaldo nativo por si el disparo externo llegara a fallar.
-    # 9:07 UTC = 06:07 ART, solo lunes.
+    # 9:07 UTC = 06:07 ART, solo lunes (la vela semanal ya cerro el viernes).
     - cron: '7 9 * * 1'
 jobs:
   golden-cross:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Verificar si ya corrio hoy con exito (cualquier disparo)
         id: chequeo
@@ -42,9 +43,10 @@ jobs:
       - name: Instalar dependencias
         if: steps.chequeo.outputs.saltar != 'true'
         run: pip install yfinance pandas
-      - name: Ejecutar escáner de Golden Cross
+      - name: Ejecutar escáner de Golden Cross SEMANAL
         if: steps.chequeo.outputs.saltar != 'true'
         env:
+          MODO: semanal
           EMAIL_SENDER: ${{ secrets.GMAIL_USER }}
           EMAIL_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.TO_EMAIL }}
