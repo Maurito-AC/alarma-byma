@@ -1,15 +1,15 @@
-name: Golden Cross Scanner - Jueves
+name: Golden Cross Scanner - Diario
 on:
   workflow_dispatch:
   repository_dispatch:
     types: [golden-cross-jueves-trigger]
   schedule:
-    # Respaldo nativo por si el disparo externo llegara a fallar.
-    # 9:07 UTC = 06:07 ART, solo jueves.
-    - cron: '7 9 * * 4'
+    # Respaldo nativo. 22:00 UTC = 19:00 ART, lunes a viernes (despues del cierre de todos los mercados).
+    - cron: '0 22 * * 1-5'
 jobs:
   golden-cross:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Verificar si ya corrio hoy con exito (cualquier disparo)
         id: chequeo
