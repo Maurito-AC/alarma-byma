@@ -45,7 +45,8 @@ TEST_MODE = False
 ZONA_NY = "America/New_York"
 ZONA_ART = "America/Argentina/Buenos_Aires"
 
-TICKERS = [
+# Lista original
+TICKERS_BASE = [
     "AAPL", "MSFT", "GOOGL", "AMZN", "META", "NVDA", "TSLA", "NFLX",
     "ORCL", "ADBE", "CRM", "INTC", "AMD", "QCOM", "TXN", "AVGO",
     "CSCO", "IBM", "MU", "AMAT", "LRCX", "MRVL", "ON", "PANW",
@@ -72,6 +73,25 @@ TICKERS = [
     "GLOB", "ROKU", "PM", "MO", "KHC", "MDLZ", "UL", "TM", "RACE",
     "STLA", "PBR", "VALE", "SHEL", "VIST", "AZN", "GSK", "MRNA",
 ]
+
+# Tickers nuevos (los que ya estaban en la lista original se descartan solos)
+TICKERS_NUEVOS = [
+    "LOMA", "SDA", "AGRO", "CEG", "HSY", "BMA", "AAP", "TGS", "NRG", "FSLR",
+    "IRS", "PSQ", "NOW", "ACN", "MRSH", "ROST", "VRTX", "MUX", "SUPV", "MSI",
+    "GLW", "SMCI", "ANET", "ARM", "CEPU", "EFX", "O", "TEO", "GGAL", "CRESY",
+    "NIO", "BIOX", "NVO", "ITA", "NEE", "DAL", "RIO", "FISV", "PAM", "GLNG",
+    "YPF", "SKHY", "TS", "HOOD", "BKR", "HAL", "MP", "NG", "ORLY", "BNY",
+    "TX", "FXI", "BKNG", "CORN", "EWY", "EWZ", "CAAP", "SNA", "ADI", "IBIT",
+    "ONDS", "EDN", "HSBC", "BBAR", "SATL", "BB", "VST", "HPQ", "SOYB", "BX",
+    "SMH", "CCL", "ISRG", "CCJ", "SAP", "TJX", "ALAB", "SNDK", "NOK", "OKLO",
+    "BE", "TEM", "IREN", "HUT",
+    # Subyacentes de CEDEARs que cotizan en EEUU
+    "HOG", "LAC", "ABEV", "HMC", "SPCE", "SWKS", "XRX", "TMC", "TEAM", "SYY",
+    "TWLO", "GPRK", "QQQ", "RBLX", "SIEGY",
+]
+
+# Sin repetidos, conservando el orden
+TICKERS = list(dict.fromkeys(TICKERS_BASE + TICKERS_NUEVOS))
 
 GMAIL_USER = os.environ["GMAIL_USER"]
 GMAIL_APP_PASSWORD = os.environ["GMAIL_APP_PASSWORD"]
@@ -273,4 +293,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
